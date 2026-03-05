@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NVIDIA 免费模型信息</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="header">
+        <h1>NVIDIA 免费模型信息（build.nvidia.com）</h1>
+        <p class="subtitle">仅显示 Active/可使用模型，并通过 model metadata endpoint 展示完整字段。右键模型行可查看可复制的 API 调用示例。</p>
+      </header>
+
+      <section class="controls">
+        <label>
+          搜索
+          <input id="search-input" type="search" placeholder="按模型名、发布者或任意字段过滤" />
+        </label>
+
+        <button id="refresh-btn" type="button">强制刷新数据</button>
+      </section>
+
+      <section class="status" id="status">准备加载数据...</section>
+
+      <section class="table-wrap">
+        <table id="models-table" class="models-table" aria-label="NVIDIA models metadata table">
+          <thead id="table-head"></thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </section>
+
+      <section id="usage-popover" class="usage-popover" hidden>
+        <header class="usage-popover-header">
+          <strong id="usage-title">模型使用示例</strong>
+          <button id="usage-close-btn" type="button" aria-label="关闭">关闭</button>
+        </header>
+        <p id="usage-subtitle" class="usage-subtitle"></p>
+        <p id="usage-meta" class="usage-meta"></p>
+
+        <div class="usage-block">
+          <div class="usage-block-head">
+            <span>cURL</span>
+            <button data-copy-target="curl" type="button">复制</button>
+          </div>
+          <pre id="usage-curl"></pre>
+        </div>
+
+        <div class="usage-block">
+          <div class="usage-block-head">
+            <span>Python</span>
+            <button data-copy-target="python" type="button">复制</button>
+          </div>
+          <pre id="usage-python"></pre>
+        </div>
+
+        <div class="usage-block">
+          <div class="usage-block-head">
+            <span>JavaScript</span>
+            <button data-copy-target="javascript" type="button">复制</button>
+          </div>
+          <pre id="usage-javascript"></pre>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
