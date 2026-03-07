@@ -22,11 +22,6 @@ if [[ -z "${Sherman_NVDA_test:-}" ]]; then
   exit 1
 fi
 
-if [[ -f ".env.example" && ! -f ".env" ]]; then
-  cp .env.example .env
-  echo "Created .env from .env.example (non-secret defaults only)."
-fi
-
 echo "Installing dependencies..."
 npm install
 

@@ -1,39 +1,9 @@
 const express = require("express");
 const path = require("node:path");
 const fs = require("node:fs");
-const { spawn } = require("node:child_process");
-const dotenv = require("dotenv");
+const { exec } = require("node:child_process");
 
 const API_KEY_ENV_NAME = "Sherman_NVDA_test";
-
-function loadNonSensitiveEnvFromDotEnv() {
-  const envPath = path.join(__dirname, ".env");
-  if (!fs.existsSync(envPath)) {
-    return;
-  }
-
-  const parsed = dotenv.parse(fs.readFileSync(envPath));
-  let apiKeyIgnored = false;
-
-  for (const [key, value] of Object.entries(parsed)) {
-    if (key === API_KEY_ENV_NAME) {
-      apiKeyIgnored = true;
-      continue;
-    }
-
-    if (process.env[key] === undefined) {
-      process.env[key] = value;
-    }
-  }
-
-  if (apiKeyIgnored) {
-    console.warn(
-      `Ignoring ${API_KEY_ENV_NAME} from .env for security. Set it as a system environment variable instead.`
-    );
-  }
-}
-
-loadNonSensitiveEnvFromDotEnv();
 
 const app = express();
 
@@ -58,37 +28,20 @@ function getApiKey() {
 }
 
 function launchBrowser(url) {
-  const shouldOpen = process.env.OPEN_BROWSER !== "0";
-  if (!shouldOpen) {
-    return;
-  }
-
-  let cmd;
-  let args;
-
+  let command;
   if (process.platform === "darwin") {
-    cmd = "open";
-    args = [url];
+    command = `open ${url}`;
   } else if (process.platform === "win32") {
-    cmd = "cmd";
-    args = ["/c", "start", "", url];
+    command = `start ${url}`;
   } else {
-    cmd = "xdg-open";
-    args = [url];
+    command = `xdg-open ${url}`;
   }
 
-  try {
-    const child = spawn(cmd, args, {
-      detached: true,
-      stdio: "ignore"
-    });
-    child.on("error", (error) => {
+  exec(command, (error) => {
+    if (error) {
       console.warn(`Unable to open browser automatically: ${error.message}`);
-    });
-    child.unref();
-  } catch (error) {
-    console.warn(`Unable to open browser automatically: ${error.message}`);
-  }
+    }
+  });
 }
 
 function getRequestHeaders() {
@@ -227,18 +180,55 @@ function flattenObject(source, target, prefix) {
   }
 }
 
+function findValueByKeyCandidates(obj, candidates) {
+  const keys = Object.keys(obj);
+  for (const key of keys) {
+    const lowered = key.toLowerCase();
+
+    // We only care about the inner key name if it's formatted like `metadata.foo`
+    const effectiveKey = lowered.includes(".") ? lowered.split(".").pop() : lowered;
+
+    if (candidates.some((c) => effectiveKey.includes(c))) {
+      const val = obj[key];
+      if (val !== null && val !== undefined && val !== "") return val;
+    }
+  }
+  return null;
+}
+
 function toRow(listModel, metadata) {
   const { publisher, modelName } = splitModelId(listModel.id);
   const row = {
     modelId: listModel.id,
     publisher,
-    modelName,
-    listObject: listModel.object,
-    listCreated: listModel.created,
-    listOwnedBy: listModel.owned_by
+    listObject: listModel.object
   };
 
   flattenObject(metadata, row, "metadata");
+  delete row["metadata.created"];
+  delete row["metadata.owned_by"];
+
+  row.contextLength = findValueByKeyCandidates(row, [
+    "context_length",
+    "contextlength",
+    "context_window",
+    "contextwindow",
+    "max_input_tokens",
+    "maxinputtokens",
+    "input_token_limit"
+  ]) || "Not Tested";
+
+  row.maxOutputTokens = findValueByKeyCandidates(row, [
+    "max_output_tokens",
+    "maxoutputtokens",
+    "output_token_limit",
+    "max_tokens",
+    "completion_token_limit"
+  ]) || "Not Tested";
+
+  row.liveTest = "Test"; // Placeholder for the frontend button
+  row.latencyMs = ""; // Populated by live test
+
   return row;
 }
 
@@ -431,18 +421,26 @@ async function mapWithConcurrency(items, concurrency, mapper) {
 
 function buildColumns(rows) {
   const pinned = [
+    "liveTest",
     "modelId",
     "publisher",
-    "modelName",
-    "listObject",
-    "listCreated",
-    "listOwnedBy"
+    "contextLength",
+    "maxOutputTokens",
+    "latencyMs"
   ];
+
+  const hiddenFields = new Set([
+    "metadata.id",
+    "metadata.object",
+    "listObject"
+  ]);
 
   const keySet = new Set();
   for (const row of rows) {
     for (const key of Object.keys(row)) {
-      keySet.add(key);
+      if (!hiddenFields.has(key)) {
+        keySet.add(key);
+      }
     }
   }
 
@@ -465,12 +463,37 @@ async function loadModelsWithMetadata({ forceRefresh = false } = {}) {
   }
 
   cache.inFlight = (async () => {
+    let testCache = {};
+    try {
+      const cacheFilePath = path.join(__dirname, "model_limits_cache.json");
+      if (fs.existsSync(cacheFilePath)) {
+        testCache = JSON.parse(fs.readFileSync(cacheFilePath, "utf8"));
+      }
+    } catch (e) { }
+
     const list = await listAllModels();
 
     const allRows = await mapWithConcurrency(list, MAX_CONCURRENCY, async (listModel) => {
       try {
         const metadata = await getModelMetadata(listModel.id);
-        return toRow(listModel, metadata);
+        const row = toRow(listModel, metadata);
+
+        // Inject cached test results if available
+        const tc = testCache[row.modelId];
+        if (tc && tc.contextLength != null) {
+          row.contextLength = tc.contextLength;
+          row.maxOutputTokens = tc.maxOutputTokens;
+          row.latencyMs = tc.latencyMs >= 0 ? tc.latencyMs : "";
+          if (tc.contextLength === "Error") {
+            row.liveTest = "Error";
+          } else if (tc.isAvailable) {
+            row.liveTest = `${tc.latencyMs}ms (OK)`;
+          } else {
+            row.liveTest = "Inactive";
+          }
+        }
+
+        return row;
       } catch (error) {
         return {
           modelId: listModel.id,
@@ -530,6 +553,138 @@ app.get("/api/models-with-metadata", async (req, res) => {
       message: error.message
     });
   }
+});
+
+app.get("/api/test-model", async (req, res) => {
+  const modelId = req.query.model;
+  if (!modelId) return res.status(400).json({ error: "Missing model parameter" });
+
+  const url = `${API_BASE_URL}/chat/completions`;
+  const headers = getRequestHeaders();
+
+  let latencyMs = -1;
+  let isAvailable = false;
+  let contextLength = null;
+  let maxOutputTokens = null;
+
+  try {
+    // 1. Test Latency & Availability
+    const start = Date.now();
+    const timeoutSmall = withTimeout(null, 15000);
+    const rSmall = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        model: modelId,
+        messages: [{ role: "user", content: "Hi" }],
+        max_tokens: 1
+      }),
+      signal: timeoutSmall.signal
+    });
+    timeoutSmall.clear();
+
+    // Some models may reject even simple requests if permission is wrong, but 200 means active
+    isAvailable = rSmall.ok;
+
+    // Always consume the body
+    await rSmall.text();
+    latencyMs = Date.now() - start;
+
+    // 2. Test Context Length and Tokens via out of bounds error scraping
+    const timeoutLimit = withTimeout(null, 15000);
+    const rLimit = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        model: modelId,
+        messages: [{ role: "user", content: "Hi" }],
+        max_tokens: 99999999
+      }),
+      signal: timeoutLimit.signal
+    });
+
+    const errorBody = await rLimit.text();
+    timeoutLimit.clear();
+    if (!rLimit.ok && errorBody) {
+      // Common Context length phrases
+      const ctxMatch = errorBody.match(/context length (?:is|of) (\d+)/i) ||
+        errorBody.match(/max_model_len=max_total_tokens=(\d+)/i);
+      if (ctxMatch) contextLength = parseInt(ctxMatch[1], 10);
+
+      // Common token limit phrases
+      const outMatch = errorBody.match(/generate up to (\d+) tokens/i) ||
+        errorBody.match(/maximum of (\d+) tokens/i) ||
+        errorBody.match(/supports at most (\d+) completion tokens/i) ||
+        errorBody.match(/Maximum allowed output length is (\d+)/i) ||
+        errorBody.match(/max_tokens must be at most (\d+)/i) ||
+        errorBody.match(/less than or equal to (\d+)/i) ||
+        errorBody.match(/max_tokens must be between \d+ and (\d+)/i);
+      if (outMatch) maxOutputTokens = parseInt(outMatch[1], 10);
+
+      // If we found a max_model_len which implies the total limit, we can fallback that to context
+      if (!contextLength && errorBody.includes("max_model_len") && errorBody.match(/max_model_len=\s*(\d+)/i)) {
+        contextLength = parseInt(errorBody.match(/max_model_len=\s*(\d+)/i)[1], 10);
+      }
+    } else if (rLimit.ok) {
+      // Model accepted the oversized max_tokens without error — no enforced limit
+      if (!contextLength) contextLength = "No Limit Reported";
+      if (!maxOutputTokens) maxOutputTokens = "No Limit Reported";
+    }
+
+    // Fallback guess: if we found contextLength but not maxOutput, it's often min(4096, contextLength)
+    if (contextLength && !maxOutputTokens) maxOutputTokens = Math.min(4096, contextLength);
+    // Conversely, if we found max completion tokens but not context, context is at least that size.
+    if (!contextLength && maxOutputTokens) contextLength = maxOutputTokens;
+
+  } catch (error) {
+    // Even on error, save the result so it's not lost on reload
+    const errResult = {
+      modelId,
+      latencyMs: -1,
+      isAvailable: false,
+      contextLength: "Error",
+      maxOutputTokens: "Error"
+    };
+    try {
+      const cacheFile = path.join(__dirname, "model_limits_cache.json");
+      let testCache = {};
+      if (fs.existsSync(cacheFile)) {
+        testCache = JSON.parse(fs.readFileSync(cacheFile, "utf8"));
+      }
+      testCache[modelId] = errResult;
+      fs.writeFileSync(cacheFile, JSON.stringify(testCache, null, 2), "utf8");
+      cache.payload = null;
+    } catch (e) {
+      console.error("Failed to save error test cache:", e.message);
+    }
+    return res.json(errResult);
+  }
+
+  const fallbackLabel = isAvailable ? "Unknown" : "Inactive";
+  const result = {
+    modelId,
+    latencyMs,
+    isAvailable,
+    contextLength: contextLength || fallbackLabel,
+    maxOutputTokens: maxOutputTokens || fallbackLabel
+  };
+
+  // Persist result to cache file
+  try {
+    const cacheFile = path.join(__dirname, "model_limits_cache.json");
+    let testCache = {};
+    if (fs.existsSync(cacheFile)) {
+      testCache = JSON.parse(fs.readFileSync(cacheFile, "utf8"));
+    }
+    testCache[modelId] = result;
+    fs.writeFileSync(cacheFile, JSON.stringify(testCache, null, 2), "utf8");
+    // Invalidate the in-memory models payload so the next refresh picks up the new cache
+    cache.payload = null;
+  } catch (e) {
+    console.error("Failed to save test cache:", e.message);
+  }
+
+  res.json(result);
 });
 
 app.listen(PORT, () => {

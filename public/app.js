@@ -1,6 +1,10 @@
 const statusEl = document.getElementById("status");
 const searchInput = document.getElementById("search-input");
 const refreshBtn = document.getElementById("refresh-btn");
+const testDisplayedBtn = document.getElementById("test-displayed-btn");
+const batchProgressContainer = document.getElementById("batch-progress-container");
+const batchProgress = document.getElementById("batch-progress");
+const batchStatus = document.getElementById("batch-status");
 const tableHead = document.getElementById("table-head");
 const tableBody = document.getElementById("table-body");
 const usagePopover = document.getElementById("usage-popover");
@@ -12,7 +16,7 @@ const usagePython = document.getElementById("usage-python");
 const usageJavascript = document.getElementById("usage-javascript");
 const usageCloseBtn = document.getElementById("usage-close-btn");
 const usageCopyButtons = document.querySelectorAll("[data-copy-target]");
-const DEFAULT_AUTO_REFRESH_MS = 10 * 60 * 1000;
+
 const CHAT_COMPLETIONS_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
 
 const state = {
@@ -27,13 +31,13 @@ const state = {
   filterText: "",
   sortKey: "modelId",
   sortDirection: "asc",
-  autoRefreshMs: DEFAULT_AUTO_REFRESH_MS,
-  nextAutoRefreshAt: Date.now() + DEFAULT_AUTO_REFRESH_MS,
   activeUsageModelId: ""
 };
 
-let autoRefreshTimer = null;
+
 let activeUsageSnippets = null;
+let isBatchTesting = false;
+let batchTestAbortController = null;
 
 function setStatus(text) {
   statusEl.textContent = text;
@@ -135,11 +139,14 @@ function buildUsageSnippets(row) {
   const payloadJson = JSON.stringify(payload, null, 2);
 
   const curlPayloadForShell = payloadJsonCompact.replace(/'/g, "'\"'\"'");
-  const curl = `curl -X POST "${CHAT_COMPLETIONS_URL}" \\\n  -H "Authorization: Bearer <YOUR_NVIDIA_API_KEY>" \\\n  -H "Content-Type: application/json" \\\n  -d '${curlPayloadForShell}'`;
+  const curl = `curl -X POST "${CHAT_COMPLETIONS_URL}" \\
+  -H "Authorization: Bearer $Sherman_NVDA_test" \\
+  -H "Content-Type: application/json" \\
+  -d '${curlPayloadForShell}'`;
 
-  const python = `import requests\n\nurl = "${CHAT_COMPLETIONS_URL}"\nheaders = {\n    "Authorization": "Bearer <YOUR_NVIDIA_API_KEY>",\n    "Content-Type": "application/json"\n}\npayload = ${payloadJson}\n\nresp = requests.post(url, headers=headers, json=payload, timeout=60)\nresp.raise_for_status()\nprint(resp.json())`;
+  const python = `import os\nimport requests\n\nurl = "${CHAT_COMPLETIONS_URL}"\nheaders = {\n    "Authorization": f"Bearer {os.environ['Sherman_NVDA_test']}",\n    "Content-Type": "application/json"\n}\npayload = ${payloadJson}\n\nresp = requests.post(url, headers=headers, json=payload, timeout=60)\nresp.raise_for_status()\nprint(resp.json())`;
 
-  const javascript = `const url = "${CHAT_COMPLETIONS_URL}";\nconst payload = ${payloadJson};\n\nconst resp = await fetch(url, {\n  method: "POST",\n  headers: {\n    Authorization: "Bearer <YOUR_NVIDIA_API_KEY>",\n    "Content-Type": "application/json"\n  },\n  body: JSON.stringify(payload)\n});\n\nif (!resp.ok) {\n  throw new Error(\`HTTP \${resp.status}: \${await resp.text()}\`);\n}\n\nconsole.log(await resp.json());`;
+  const javascript = `const url = "${CHAT_COMPLETIONS_URL}";\nconst payload = ${payloadJson};\n\nconst resp = await fetch(url, {\n  method: "POST",\n  headers: {\n    Authorization: \`Bearer \${process.env.Sherman_NVDA_test}\`,\n    "Content-Type": "application/json"\n  },\n  body: JSON.stringify(payload)\n});\n\nif (!resp.ok) {\n  throw new Error(\`HTTP \${resp.status}: \${await resp.text()}\`);\n}\n\nconsole.log(await resp.json());`;
 
   return {
     modelId,
@@ -204,18 +211,18 @@ function getFilteredAndSortedRows() {
 
   const filtered = filter
     ? state.rows.filter((row) => {
-        for (const key of state.columns) {
-          const value = row[key];
-          if (value === null || value === undefined) {
-            continue;
-          }
-
-          if (String(value).toLowerCase().includes(filter)) {
-            return true;
-          }
+      for (const key of state.columns) {
+        const value = row[key];
+        if (value === null || value === undefined) {
+          continue;
         }
-        return false;
-      })
+
+        if (String(value).toLowerCase().includes(filter)) {
+          return true;
+        }
+      }
+      return false;
+    })
     : [...state.rows];
 
   filtered.sort((a, b) => {
@@ -238,10 +245,166 @@ function toggleSort(columnKey) {
 }
 
 function makeHeaderLabel(columnKey) {
+  if (columnKey === "liveTest") return "Live Ping";
   if (columnKey === "modelId") return "Model ID";
   if (columnKey === "publisher") return "Publisher";
   if (columnKey === "modelName") return "Model Name";
+  if (columnKey === "contextLength") return "Context Limit";
+  if (columnKey === "maxOutputTokens") return "Max Output";
+  if (columnKey === "latencyMs") return "Latency (ms)";
   return columnKey;
+}
+
+function formatTokensToK(val) {
+  if (typeof val === "number") {
+    return Math.round(val / 1024) + "K";
+  }
+  const parsed = parseInt(val, 10);
+  if (!isNaN(parsed)) {
+    return Math.round(parsed / 1024) + "K";
+  }
+  return val;
+}
+
+async function runLiveTest(row, btn) {
+  try {
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "Testing...";
+    }
+
+    const r = await fetch(`/api/test-model?model=${encodeURIComponent(row.modelId)}`);
+    const data = await r.json();
+
+    if (!r.ok) throw new Error(data.error || "Bad status");
+
+    // Update local state row
+    row.liveTest = `${data.latencyMs}ms (${data.isAvailable ? 'OK' : 'Fail'})`;
+    row.latencyMs = data.latencyMs;
+    row.contextLength = data.contextLength;
+    row.maxOutputTokens = data.maxOutputTokens;
+
+    // Force a re-render
+    render();
+  } catch (e) {
+    // True network failure — update row to show error state
+    row.liveTest = "Error";
+    row.contextLength = "Error";
+    row.maxOutputTokens = "Error";
+    render();
+    console.error(e);
+  }
+}
+
+async function runBatchTest(force = false) {
+  if (isBatchTesting) {
+    // User wants to cancel
+    if (batchTestAbortController) batchTestAbortController.abort();
+    isBatchTesting = false;
+    testDisplayedBtn.textContent = "Test Displayed Models";
+    testDisplayedBtn.style.backgroundColor = "";
+    batchProgressContainer.hidden = true;
+    return;
+  }
+
+  const visibleRows = getFilteredAndSortedRows();
+  if (visibleRows.length === 0) return;
+
+  isBatchTesting = true;
+  testDisplayedBtn.textContent = "Stop Testing";
+  testDisplayedBtn.style.backgroundColor = "#d32f2f";
+  batchProgress.max = visibleRows.length;
+  batchProgress.value = 0;
+  batchProgressContainer.hidden = false;
+  batchTestAbortController = new AbortController();
+  const signal = batchTestAbortController.signal;
+
+  let count = 0;
+  for (const row of visibleRows) {
+    if (signal.aborted) break;
+
+    // Skip if already tested with numeric limits, unless forcing
+    // Models that were tested but got non-numeric results (Error, No Limit Reported, etc.) are retested
+    const hasNumericLimits = typeof row.contextLength === 'number' && typeof row.maxOutputTokens === 'number';
+    if (!force && row.liveTest && typeof row.liveTest === 'string' && row.liveTest.includes("ms") && hasNumericLimits) {
+      count++;
+      batchProgress.value = count;
+      continue;
+    }
+
+    count++;
+    batchProgress.value = count;
+    batchStatus.textContent = `Batch testing ${force ? '(Forced) ' : ''}${count}/${visibleRows.length}: ${row.modelId}... (3.5s delay to avoid rate limits)`;
+
+    const tr = document.querySelector(`tr[data-model-id="${row.modelId}"]`);
+    const btn = tr ? tr.querySelector('.live-test-btn') : null;
+
+    await runLiveTest(row, btn);
+
+    // Check if we need to retry — no numeric limits found
+    const gotNumericCtx = typeof row.contextLength === "number";
+    const gotNumericOut = typeof row.maxOutputTokens === "number";
+    const needsRetry = !gotNumericCtx && !gotNumericOut;
+
+    console.log(`[batch] ${row.modelId}: ctx=${row.contextLength} (${typeof row.contextLength}), out=${row.maxOutputTokens} (${typeof row.maxOutputTokens}), needsRetry=${needsRetry}`);
+
+    if (needsRetry && !signal.aborted) {
+      // Update batchStatus text — this element is NEVER destroyed by render()
+      batchStatus.textContent = `⟳ Retrying ${count}/${visibleRows.length}: ${row.modelId}... (waiting 3.5s)`;
+
+      // Re-query button from fresh DOM (render() rebuilt the table)
+      const freshBtn = document.querySelector(`tr[data-model-id="${row.modelId}"] .live-test-btn`);
+      if (freshBtn) {
+        freshBtn.textContent = "Retrying...";
+        freshBtn.classList.add("retry");
+        freshBtn.disabled = false;
+      }
+
+      console.log(`[batch] ${row.modelId}: retrying in 3.5s, freshBtn found: ${!!freshBtn}`);
+
+      // Wait before retry
+      try {
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(resolve, 3500);
+          signal.addEventListener('abort', () => {
+            clearTimeout(timeout);
+            reject(new Error('Aborted'));
+          });
+        });
+      } catch (e) {
+        break; // aborted
+      }
+
+      if (!signal.aborted) {
+        // Re-query again since we just waited
+        const retryBtn = document.querySelector(`tr[data-model-id="${row.modelId}"] .live-test-btn`);
+        console.log(`[batch] ${row.modelId}: executing retry now`);
+        await runLiveTest(row, retryBtn);
+        console.log(`[batch] ${row.modelId}: retry done — ctx=${row.contextLength}, out=${row.maxOutputTokens}`);
+      }
+    }
+
+    // Wait ~3500ms before next test to stay under 40 requests/min
+    if (count < visibleRows.length && !signal.aborted) {
+      try {
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(resolve, 3500);
+          signal.addEventListener('abort', () => {
+            clearTimeout(timeout);
+            reject(new Error('Aborted'));
+          });
+        });
+      } catch (e) {
+        break; // aborted
+      }
+    }
+  }
+
+  isBatchTesting = false;
+  testDisplayedBtn.textContent = "Test Displayed Models";
+  testDisplayedBtn.style.backgroundColor = "";
+  batchProgressContainer.hidden = true;
+  render(); // restore normal status text
 }
 
 function renderTableHeader() {
@@ -292,9 +455,32 @@ function renderTableBody(rows) {
     state.columns.forEach((columnKey, index) => {
       const td = document.createElement("td");
       const value = row[columnKey];
-      td.textContent = value === null || value === undefined ? "" : String(value);
 
-      if (index <= 2) {
+      if (columnKey === "liveTest") {
+        const hasResult = row.liveTest && typeof row.liveTest === "string" && row.liveTest !== "Test";
+        if (hasResult) {
+          const span = document.createElement("span");
+          span.textContent = row.liveTest + " ";
+          span.style.marginRight = "6px";
+          td.appendChild(span);
+        }
+        const btn = document.createElement("button");
+        btn.textContent = hasResult ? "Re-test" : "Ping";
+        btn.className = "live-test-btn";
+        btn.style.fontSize = hasResult ? "11px" : "";
+        btn.style.padding = hasResult ? "2px 6px" : "";
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          runLiveTest(row, btn);
+        };
+        td.appendChild(btn);
+      } else if (columnKey === "contextLength" || columnKey === "maxOutputTokens") {
+        td.textContent = value === null || value === undefined ? "" : formatTokensToK(value);
+      } else {
+        td.textContent = value === null || value === undefined ? "" : String(value);
+      }
+
+      if (index <= 3) {
         td.classList.add("pinned");
         td.style.left = `${index * 240}px`;
       }
@@ -312,14 +498,10 @@ function renderStatus(visibleRows) {
   const sortLabel = `${state.sortKey} (${state.sortDirection})`;
   const fetchedAtLabel = state.fetchedAt ? new Date(state.fetchedAt).toLocaleString() : "-";
   const keyLabel = state.apiKeyConfigured ? "已配置" : "未配置";
-  const nextRefreshLabel = state.nextAutoRefreshAt
-    ? new Date(state.nextAutoRefreshAt).toLocaleTimeString()
-    : "-";
-  const refreshEveryLabel = `${Math.round(state.autoRefreshMs / 60000)} 分钟`;
   const totalLabel = state.totalModelCount > 0 ? state.totalModelCount : state.modelCount;
 
   setStatus(
-    `可用(Active)模型: ${state.modelCount} / 全部: ${totalLabel} | 当前显示: ${visibleRows} | 已过滤: ${state.filteredOutCount} | 排序: ${sortLabel} | API Key: ${keyLabel} | 数据时间: ${fetchedAtLabel} | 自动刷新: 每 ${refreshEveryLabel} | 下次刷新: ${nextRefreshLabel}`
+    `可用(Active)模型: ${state.modelCount} / 全部: ${totalLabel} | 当前显示: ${visibleRows} | 已过滤: ${state.filteredOutCount} | 排序: ${sortLabel} | API Key: ${keyLabel} | 数据时间: ${fetchedAtLabel}`
   );
 }
 
@@ -371,19 +553,10 @@ async function loadData(forceRefresh = false) {
   } finally {
     state.loading = false;
     refreshBtn.disabled = false;
-    state.nextAutoRefreshAt = Date.now() + state.autoRefreshMs;
   }
 }
 
-function startAutoRefresh() {
-  if (autoRefreshTimer) {
-    clearInterval(autoRefreshTimer);
-  }
 
-  autoRefreshTimer = setInterval(() => {
-    loadData(true);
-  }, state.autoRefreshMs);
-}
 
 searchInput.addEventListener("input", (event) => {
   state.filterText = event.target.value || "";
@@ -392,6 +565,11 @@ searchInput.addEventListener("input", (event) => {
 
 refreshBtn.addEventListener("click", () => {
   loadData(true);
+});
+
+testDisplayedBtn.addEventListener("click", (e) => {
+  // If user holds Shift while clicking, force test all elements
+  runBatchTest(e.shiftKey);
 });
 
 usageCloseBtn.addEventListener("click", () => {
@@ -444,4 +622,3 @@ document.addEventListener("keydown", (event) => {
 });
 
 loadData(false);
-startAutoRefresh();
