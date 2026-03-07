@@ -4,3 +4,5 @@ node_modules
 npm-debug.log*
 test-results
 playwright-report
+model_limits_cache.json
+bulk_test.log
