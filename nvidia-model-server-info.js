@@ -228,6 +228,7 @@ function toRow(listModel, metadata) {
 
   row.liveTest = "Test"; // Placeholder for the frontend button
   row.latencyMs = ""; // Populated by live test
+  row.testedAt = ""; // Populated by live test
 
   return row;
 }
@@ -426,7 +427,8 @@ function buildColumns(rows) {
     "publisher",
     "contextLength",
     "maxOutputTokens",
-    "latencyMs"
+    "latencyMs",
+    "testedAt"
   ];
 
   const hiddenFields = new Set([
@@ -484,6 +486,8 @@ async function loadModelsWithMetadata({ forceRefresh = false } = {}) {
           row.contextLength = tc.contextLength;
           row.maxOutputTokens = tc.maxOutputTokens;
           row.latencyMs = tc.latencyMs >= 0 ? tc.latencyMs : "";
+          row.testedAt = tc.testedAt || "";
+          
           if (tc.contextLength === "Error") {
             row.liveTest = "Error";
           } else if (tc.isAvailable) {
@@ -643,7 +647,8 @@ app.get("/api/test-model", async (req, res) => {
       latencyMs: -1,
       isAvailable: false,
       contextLength: "Error",
-      maxOutputTokens: "Error"
+      maxOutputTokens: "Error",
+      testedAt: new Date().toLocaleString()
     };
     try {
       const cacheFile = path.join(__dirname, "model_limits_cache.json");
@@ -666,7 +671,8 @@ app.get("/api/test-model", async (req, res) => {
     latencyMs,
     isAvailable,
     contextLength: contextLength || fallbackLabel,
-    maxOutputTokens: maxOutputTokens || fallbackLabel
+    maxOutputTokens: maxOutputTokens || fallbackLabel,
+    testedAt: new Date().toLocaleString()
   };
 
   // Persist result to cache file
