@@ -624,51 +624,53 @@ app.get("/api/test-model", async (req, res) => {
     await rSmall.text();
     latencyMs = Date.now() - start;
 
-    // 2. Test Context Length and Tokens via out of bounds error scraping
-    const timeoutLimit = withTimeout(null, 15000);
-    const rLimit = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        model: modelId,
-        messages: [{ role: "user", content: "Hi" }],
-        max_tokens: 99999999
-      }),
-      signal: timeoutLimit.signal
-    });
+    if (isAvailable) {
+      // 2. Test Context Length and Tokens via out of bounds error scraping
+      const timeoutLimit = withTimeout(null, 15000);
+      const rLimit = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          model: modelId,
+          messages: [{ role: "user", content: "Hi" }],
+          max_tokens: 99999999
+        }),
+        signal: timeoutLimit.signal
+      });
 
-    const errorBody = await rLimit.text();
-    timeoutLimit.clear();
-    if (!rLimit.ok && errorBody) {
-      // Common Context length phrases
-      const ctxMatch = errorBody.match(/context length (?:is|of) (\d+)/i) ||
-        errorBody.match(/max_model_len=max_total_tokens=(\d+)/i);
-      if (ctxMatch) contextLength = parseInt(ctxMatch[1], 10);
+      const errorBody = await rLimit.text();
+      timeoutLimit.clear();
+      if (!rLimit.ok && errorBody) {
+        // Common Context length phrases
+        const ctxMatch = errorBody.match(/context length (?:is|of) (\d+)/i) ||
+          errorBody.match(/max_model_len=max_total_tokens=(\d+)/i);
+        if (ctxMatch) contextLength = parseInt(ctxMatch[1], 10);
 
-      // Common token limit phrases
-      const outMatch = errorBody.match(/generate up to (\d+) tokens/i) ||
-        errorBody.match(/maximum of (\d+) tokens/i) ||
-        errorBody.match(/supports at most (\d+) completion tokens/i) ||
-        errorBody.match(/Maximum allowed output length is (\d+)/i) ||
-        errorBody.match(/max_tokens must be at most (\d+)/i) ||
-        errorBody.match(/less than or equal to (\d+)/i) ||
-        errorBody.match(/max_tokens must be between \d+ and (\d+)/i);
-      if (outMatch) maxOutputTokens = parseInt(outMatch[1], 10);
+        // Common token limit phrases
+        const outMatch = errorBody.match(/generate up to (\d+) tokens/i) ||
+          errorBody.match(/maximum of (\d+) tokens/i) ||
+          errorBody.match(/supports at most (\d+) completion tokens/i) ||
+          errorBody.match(/Maximum allowed output length is (\d+)/i) ||
+          errorBody.match(/max_tokens must be at most (\d+)/i) ||
+          errorBody.match(/less than or equal to (\d+)/i) ||
+          errorBody.match(/max_tokens must be between \d+ and (\d+)/i);
+        if (outMatch) maxOutputTokens = parseInt(outMatch[1], 10);
 
-      // If we found a max_model_len which implies the total limit, we can fallback that to context
-      if (!contextLength && errorBody.includes("max_model_len") && errorBody.match(/max_model_len=\s*(\d+)/i)) {
-        contextLength = parseInt(errorBody.match(/max_model_len=\s*(\d+)/i)[1], 10);
+        // If we found a max_model_len which implies the total limit, we can fallback that to context
+        if (!contextLength && errorBody.includes("max_model_len") && errorBody.match(/max_model_len=\s*(\d+)/i)) {
+          contextLength = parseInt(errorBody.match(/max_model_len=\s*(\d+)/i)[1], 10);
+        }
+      } else if (rLimit.ok) {
+        // Model accepted the oversized max_tokens without error - no enforced limit
+        if (!contextLength) contextLength = "No Limit Reported";
+        if (!maxOutputTokens) maxOutputTokens = "No Limit Reported";
       }
-    } else if (rLimit.ok) {
-      // Model accepted the oversized max_tokens without error - no enforced limit
-      if (!contextLength) contextLength = "No Limit Reported";
-      if (!maxOutputTokens) maxOutputTokens = "No Limit Reported";
-    }
 
-    // Fallback guess: if we found contextLength but not maxOutput, it's often min(4096, contextLength)
-    if (contextLength && !maxOutputTokens) maxOutputTokens = Math.min(4096, contextLength);
-    // Conversely, if we found max completion tokens but not context, context is at least that size.
-    if (!contextLength && maxOutputTokens) contextLength = maxOutputTokens;
+      // Fallback guess: if we found contextLength but not maxOutput, it's often min(4096, contextLength)
+      if (contextLength && !maxOutputTokens) maxOutputTokens = Math.min(4096, contextLength);
+      // Conversely, if we found max completion tokens but not context, context is at least that size.
+      if (!contextLength && maxOutputTokens) contextLength = maxOutputTokens;
+    }
 
   } catch (error) {
     // Even on error, save the result so it's not lost on reload
