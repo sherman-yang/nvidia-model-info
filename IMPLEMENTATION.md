@@ -3,7 +3,7 @@
 ## 1. Architecture Overview
 The application consists of a Node.js Express backend and a vanilla HTML/CSS/JavaScript frontend. It acts as an integration layer between the user's browser and the `build.nvidia.com` APIs.
 
-## 2. Backend (`server.js`)
+## 2. Backend (`nvidia-model-server-info.js`)
 
 **Key Responsibilities:**
 - Serve static frontend files from the `public/` directory.
@@ -78,7 +78,7 @@ The application consists of a Node.js Express backend and a vanilla HTML/CSS/Jav
    - Automatically follows the user's system preference.
 
 ## 4. Initialization
-- **`start.sh`**: Acts as the single entrypoint for the project. The script verifies that Node.js and NPM exist, asserts that the `Sherman_NVDA_test` environment variable has been exported successfully, installs dependencies via `npm install`, and delegates execution directly to the `server.js` backend, ensuring a smooth and consistent launch pattern.
+- **`start.sh`**: Acts as the single entrypoint for the project. The script verifies that Node.js and NPM exist, asserts that the `Sherman_NVDA_test` environment variable has been exported successfully, installs dependencies via `npm install`, and delegates execution directly to the `nvidia-model-server-info.js` backend, ensuring a smooth and consistent launch pattern.
 
 ## 5. Dependencies
 - **Node.js**: Requires `v18+` (uses globally available `fetch`).

@@ -2,11 +2,11 @@
   "name": "nvidia-model-info",
   "version": "1.0.0",
   "description": "Display free models from build.nvidia.com with sortable metadata.",
-  "main": "server.js",
+  "main": "nvidia-model-server-info.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js",
-    "check": "node --check server.js && node --check public/app.js"
+    "start": "node nvidia-model-server-info.js",
+    "dev": "node --watch nvidia-model-server-info.js",
+    "check": "node --check nvidia-model-server-info.js && node --check public/app.js"
   },
   "keywords": [
     "nvidia",

@@ -578,6 +578,24 @@ async function loadData(forceRefresh = false) {
     state.filteredOutCount = Number(payload.filteredOutCount || 0);
     state.apiKeyConfigured = Boolean(payload.apiKeyConfigured);
 
+    // Reconstruct the visual testState from the loaded string values
+    state.rows.forEach(row => {
+      const live = String(row.liveTest || "");
+      if (live === "Test") {
+        row.testState = "";
+      } else if (live.includes("Error") || live.includes("Inactive")) {
+        row.testState = "error";
+      } else {
+        const cl = String(row.contextLength || "");
+        const mo = String(row.maxOutputTokens || "");
+        if (cl.includes("No Limit") || mo.includes("No Limit")) {
+          row.testState = "warning";
+        } else {
+          row.testState = "success";
+        }
+      }
+    });
+
     if (!state.columns.includes(state.sortKey) && state.columns.length > 0) {
       state.sortKey = state.columns[0];
       state.sortDirection = "asc";
