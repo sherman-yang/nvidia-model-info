@@ -427,15 +427,10 @@ async function runBatchTest(force = false) {
 
     await runLiveTest(row, btn);
 
-    // Check if we need to retry.
-    // We only retry if we suffered a true network Error, or if the limit was 'Unknown'.
-    // We DO NOT retry if limits are 'No Limit Reported' (it successfully worked but had no limits) 
-    // and we DO NOT retry if it is explicitly 'Inactive' (the model is hard-offline).
+    // Check if we need to retry — no numeric limits found
     const gotNumericCtx = typeof row.contextLength === "number";
     const gotNumericOut = typeof row.maxOutputTokens === "number";
-    const needsRetry = !gotNumericCtx && !gotNumericOut && 
-                       row.contextLength !== "No Limit Reported" && 
-                       row.contextLength !== "Inactive";
+    const needsRetry = !gotNumericCtx && !gotNumericOut;
 
     console.log(`[batch] ${row.modelId}: ctx=${row.contextLength} (${typeof row.contextLength}), out=${row.maxOutputTokens} (${typeof row.maxOutputTokens}), needsRetry=${needsRetry}`);
 
