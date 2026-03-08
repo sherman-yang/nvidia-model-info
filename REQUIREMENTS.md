@@ -9,6 +9,7 @@ The purpose of this project is to display information about the free AI models p
    * Fetch all models from the NVIDIA API.
    * **Only** display models that are active and usable. Any models marked as deprecated, retired, inactive, etc., must be hidden from the user interface.
    * Provide a real-time text filter allowing the user to search by model name, publisher, or any other metadata field.
+   * Provide an "Exclude Inactive/Error" toggle to instantly hide models that failed their live ping tests or do not report limits.
 
 2. **Metadata Display**
    * For each active model, fetch its complete metadata via the specific model metadata endpoint.
@@ -19,8 +20,9 @@ The purpose of this project is to display information about the free AI models p
 
 3. **Live Ping & Limits Detection**
    * Each model row includes a "Ping" button to send a test request measuring latency and detecting actual context/output token limits via error response parsing.
+   * Provide clear, colored visual feedback during the testing process (e.g., Blue for Testing, Orange for Retrying, Green for Success, Red for Error).
    * Test results are persisted to `model_limits_cache.json` and survive page refreshes and server restarts.
-   * Support batch testing of all displayed models with rate-limit protection.
+   * Support batch testing of all displayed models with rate-limit protection and automatic retries for failed tokens.
 
 4. **Usage Examples**
    * Allow users to right-click a row to see usage examples for that specific model.

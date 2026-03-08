@@ -173,6 +173,24 @@ input[type="search"] {
   padding: 8px 10px;
 }
 
+.filter-chk-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.filter-chk-label input[type="checkbox"] {
+  cursor: pointer;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+}
+
 button {
   background: linear-gradient(135deg, var(--btn-grad-1), var(--btn-grad-2));
   color: var(--btn-text);
@@ -428,9 +446,24 @@ button:hover {
 }
 
 /* Retry Button Override */
+/* Retry Button Override (legacy, now handled by states below, kept for fallback) */
 .live-test-btn.retry {
   background-color: #ff9800 !important;
   color: #fff !important;
   opacity: 1 !important;
   cursor: wait !important;
 }
+
+/* Status-based Visual Feedback for Live Ping Cell - Text */
+td.status-testing span { color: #2196F3 !important; } /* Blue */
+td.status-retrying span { color: #FF9800 !important; } /* Orange */
+td.status-success span { color: #4CAF50 !important; } /* Green */
+td.status-warning span { color: #FFD54F !important; } /* Yellow/Gold */
+td.status-error span { color: #F44336 !important; } /* Red */
+
+/* Status-based Visual Feedback for Live Ping Cell - Button */
+td.status-testing button { background: #2196F3 !important; color: #fff !important; border: none !important; }
+td.status-retrying button { background: #FF9800 !important; color: #fff !important; border: none !important; }
+td.status-success button { background: #4CAF50 !important; color: #fff !important; border: none !important; }
+td.status-warning button { background: #FFD54F !important; color: #000 !important; border: none !important; }
+td.status-error button { background: #F44336 !important; color: #fff !important; border: none !important; }

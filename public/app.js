@@ -1,5 +1,6 @@
 const statusEl = document.getElementById("status");
 const searchInput = document.getElementById("search-input");
+const filterInactiveChk = document.getElementById("filter-inactive-chk");
 const refreshBtn = document.getElementById("refresh-btn");
 const testDisplayedBtn = document.getElementById("test-displayed-btn");
 const batchProgressContainer = document.getElementById("batch-progress-container");
@@ -29,6 +30,7 @@ const state = {
   filteredOutCount: 0,
   apiKeyConfigured: false,
   filterText: "",
+  excludeInactive: false,
   sortKey: "modelId",
   sortDirection: "asc",
   activeUsageModelId: ""
@@ -71,7 +73,7 @@ function compareValues(aValue, bValue) {
     return Number(aNorm) - Number(bNorm);
   }
 
-  return String(aNorm).localeCompare(String(bNorm), "zh-CN", {
+  return String(aNorm).localeCompare(String(bNorm), "en-US", {
     numeric: true,
     sensitivity: "base"
   });
@@ -125,12 +127,12 @@ function buildUsageSnippets(row) {
   ]);
 
   const maxTokens = isFiniteNumber(maxOutputTokensValue) ? Number(maxOutputTokensValue) : 512;
-  const contextLengthText = contextLengthValue !== null ? String(contextLengthValue) : "未知";
-  const maxOutputText = maxOutputTokensValue !== null ? String(maxOutputTokensValue) : "未知";
+  const contextLengthText = contextLengthValue !== null ? String(contextLengthValue) : "Unknown";
+  const maxOutputText = maxOutputTokensValue !== null ? String(maxOutputTokensValue) : "Unknown";
 
   const payload = {
     model: modelId,
-    messages: [{ role: "user", content: "请简单介绍这个模型的最佳使用场景。" }],
+    messages: [{ role: "user", content: "Please briefly introduce the best use cases for this model." }],
     max_tokens: maxTokens,
     temperature: 0.2
   };
@@ -171,9 +173,9 @@ function showUsagePopover(row, clientX, clientY) {
   state.activeUsageModelId = usage.modelId;
   activeUsageSnippets = usage.snippets;
 
-  usageTitle.textContent = "模型使用示例";
+  usageTitle.textContent = "Model Usage Examples";
   usageSubtitle.textContent = `Model: ${usage.modelId}`;
-  usageMeta.textContent = `context_length: ${usage.contextLengthText} | max_output_tokens: ${usage.maxOutputText} | API Key 环境变量: Sherman_NVDA_test`;
+  usageMeta.textContent = `context_length: ${usage.contextLengthText} | max_output_tokens: ${usage.maxOutputText} | API Key Env Var: Sherman_NVDA_test`;
   usageCurl.textContent = usage.snippets.curl;
   usagePython.textContent = usage.snippets.python;
   usageJavascript.textContent = usage.snippets.javascript;
@@ -211,6 +213,15 @@ function getFilteredAndSortedRows() {
 
   const filtered = filter
     ? state.rows.filter((row) => {
+      // Handle the Ignore Inactive/Error checkbox 
+      if (state.excludeInactive) {
+        const isError = row.liveTest === "Error" || row.contextLength === "Error" || row.maxOutputTokens === "Error";
+        const isInactive = row.liveTest === "Inactive" || row.contextLength === "Inactive" || row.maxOutputTokens === "Inactive";
+        if (isError || isInactive) {
+          return false;
+        }
+      }
+
       for (const key of state.columns) {
         const value = row[key];
         if (value === null || value === undefined) {
@@ -223,7 +234,16 @@ function getFilteredAndSortedRows() {
       }
       return false;
     })
-    : [...state.rows];
+    : state.rows.filter((row) => {
+      if (state.excludeInactive) {
+        const isError = row.liveTest === "Error" || row.contextLength === "Error" || row.maxOutputTokens === "Error";
+        const isInactive = row.liveTest === "Inactive" || row.contextLength === "Inactive" || row.maxOutputTokens === "Inactive";
+        if (isError || isInactive) {
+          return false;
+        }
+      }
+      return true;
+    });
 
   filtered.sort((a, b) => {
     const compareResult = compareValues(a[state.sortKey], b[state.sortKey]);
@@ -266,12 +286,15 @@ function formatTokensToK(val) {
   return val;
 }
 
-async function runLiveTest(row, btn) {
+async function runLiveTest(row, btn, isRetry = false) {
   try {
     if (btn) {
       btn.disabled = true;
-      btn.textContent = "Testing...";
+      btn.textContent = isRetry ? "Retrying..." : "Testing...";
     }
+    row.testState = isRetry ? "retrying" : "testing";
+    // Force a re-render so text turns blue/orange immediately
+    render();
 
     const r = await fetch(`/api/test-model?model=${encodeURIComponent(row.modelId)}`);
     const data = await r.json();
@@ -284,6 +307,14 @@ async function runLiveTest(row, btn) {
     row.contextLength = data.contextLength;
     row.maxOutputTokens = data.maxOutputTokens;
 
+    // Determine state
+    if (!data.isAvailable) {
+      row.testState = "error";
+    } else {
+      const hasNumbers = typeof data.contextLength === 'number' || typeof data.maxOutputTokens === 'number';
+      row.testState = hasNumbers ? "success" : "warning";
+    }
+
     // Force a re-render
     render();
   } catch (e) {
@@ -291,6 +322,7 @@ async function runLiveTest(row, btn) {
     row.liveTest = "Error";
     row.contextLength = "Error";
     row.maxOutputTokens = "Error";
+    row.testState = "error";
     render();
     console.error(e);
   }
@@ -379,7 +411,7 @@ async function runBatchTest(force = false) {
         // Re-query again since we just waited
         const retryBtn = document.querySelector(`tr[data-model-id="${row.modelId}"] .live-test-btn`);
         console.log(`[batch] ${row.modelId}: executing retry now`);
-        await runLiveTest(row, retryBtn);
+        await runLiveTest(row, retryBtn, true);
         console.log(`[batch] ${row.modelId}: retry done — ctx=${row.contextLength}, out=${row.maxOutputTokens}`);
       }
     }
@@ -457,6 +489,10 @@ function renderTableBody(rows) {
       const value = row[columnKey];
 
       if (columnKey === "liveTest") {
+        if (row.testState) {
+          td.classList.add(`status-${row.testState}`);
+        }
+        
         const hasResult = row.liveTest && typeof row.liveTest === "string" && row.liveTest !== "Test";
         if (hasResult) {
           const span = document.createElement("span");
@@ -497,11 +533,11 @@ function renderTableBody(rows) {
 function renderStatus(visibleRows) {
   const sortLabel = `${state.sortKey} (${state.sortDirection})`;
   const fetchedAtLabel = state.fetchedAt ? new Date(state.fetchedAt).toLocaleString() : "-";
-  const keyLabel = state.apiKeyConfigured ? "已配置" : "未配置";
+  const keyLabel = state.apiKeyConfigured ? "Configured" : "Not Configured";
   const totalLabel = state.totalModelCount > 0 ? state.totalModelCount : state.modelCount;
 
   setStatus(
-    `可用(Active)模型: ${state.modelCount} / 全部: ${totalLabel} | 当前显示: ${visibleRows} | 已过滤: ${state.filteredOutCount} | 排序: ${sortLabel} | API Key: ${keyLabel} | 数据时间: ${fetchedAtLabel}`
+    `Active Models: ${state.modelCount} / Total: ${totalLabel} | Displaying: ${visibleRows} | Filtered: ${state.filteredOutCount} | Sort: ${sortLabel} | API Key: ${keyLabel} | Data from: ${fetchedAtLabel}`
   );
 }
 
@@ -521,7 +557,7 @@ async function loadData(forceRefresh = false) {
 
   state.loading = true;
   refreshBtn.disabled = true;
-  setStatus("正在加载模型列表和 metadata，请稍候...");
+  setStatus("Loading model list and metadata, please wait...");
 
   try {
     const url = forceRefresh ? "/api/models-with-metadata?refresh=1" : "/api/models-with-metadata";
@@ -549,7 +585,7 @@ async function loadData(forceRefresh = false) {
 
     render();
   } catch (error) {
-    setStatus(`加载失败: ${error.message}`);
+    setStatus(`Load failed: ${error.message}`);
   } finally {
     state.loading = false;
     refreshBtn.disabled = false;
@@ -560,6 +596,11 @@ async function loadData(forceRefresh = false) {
 
 searchInput.addEventListener("input", (event) => {
   state.filterText = event.target.value || "";
+  render();
+});
+
+filterInactiveChk.addEventListener("change", (event) => {
+  state.excludeInactive = event.target.checked;
   render();
 });
 
@@ -591,9 +632,9 @@ usageCopyButtons.forEach((button) => {
     const originalText = button.textContent;
     try {
       await copyTextToClipboard(text);
-      button.textContent = "已复制";
+      button.textContent = "Copied";
     } catch (error) {
-      button.textContent = "复制失败";
+      button.textContent = "Copy failed";
       console.error(error);
     } finally {
       setTimeout(() => {

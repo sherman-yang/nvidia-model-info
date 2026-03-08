@@ -56,9 +56,11 @@ The application consists of a Node.js Express backend and a vanilla HTML/CSS/Jav
 2. **Table Rendering**:
    - Pinned columns: `liveTest` (Live Ping), `modelId`, `publisher`, `contextLength`, `maxOutputTokens`, `latencyMs`. These are sticky on the left for easy reference.
    - When a model has cached test results, the Live Ping column shows the result (e.g. `"850ms (OK)"`) alongside a small "Re-test" button. Untested models show a "Ping" button.
+   - Applies dynamic CSS classes (`status-testing`, `status-success`, `status-error`, etc.) to the `liveTest` cell based on the internal `testState` to alter button backgrounds and text colors for high-contrast visual feedback.
 
 3. **Sorting and Filtering**:
    - A real-time search box applies a substring match against all column values.
+   - An "Exclude Inactive/Error" checkbox filters out rows with `liveTest` or token limits marked as "Error" or "Inactive".
    - Clicking headers toggles ascending/descending sorting, implemented by standardizing numbers vs text mapping (`compareValues`).
 
 4. **Live Testing**:
@@ -83,3 +85,20 @@ The application consists of a Node.js Express backend and a vanilla HTML/CSS/Jav
 - **Express (`^4.21.2`)**: For the HTTP web server and robust static file routing.
 
 *(Note: Environment configurations like `dotenv` have been explicitly removed according to requirements. The application mandates system environment variable usage exclusively.)*
+
+## 6. Prerequisites and Limitations
+
+### Prerequisites
+- **API Key**: Requires a valid NVIDIA API Key (`build.nvidia.com`) exported in the environment (`Sherman_NVDA_test`).
+- **Network Access**: The host machine must have outbound network access to `integrate.api.nvidia.com` for fetching lists and pinging models.
+- **Node.js Environment**: The backend specifically targets Node.js v18+ because it inherently relies on the globally available `fetch()` API introduced natively in that version.
+
+### Limitations
+- **Rate Limiting**: The NVIDIA free API enforces a strict limit (often ~40 requests per minute). Although the batch testing loop employs a 3.5s delay to mitigate this, large batches might still trigger `429 Too Many Requests` when background network latency fluctuates.
+- **Heuristic-based Scraping**: Token limits (Context Length and Max Output) are not explicitly provided in a standard structured way from the models endpoint. The application relies entirely on triggering and parsing `400 Bad Request` or `422 Unprocessable Entity` error message bodies to discover these limits. Any unannounced change by NVIDIA to their error schema format could temporarily break this limit-detection logic.
+- **Absence of Official Tokens**: Some models dynamically scale their limits or simply ignore the `max_tokens` field. In these instances, the logic will safely fall back to "No Limit Reported", meaning we cannot conclusively determine a hard ceiling through probing alone.
+
+## 7. Future Development Directions and Improvements
+- **WebSockets / Server-Sent Events (SSE)**: Transition the Live Ping feature from heavy HTTP polling loops to an SSE stream so the frontend can receive real-time, event-driven updates during massive bulk tests.
+- **Advanced Exporting**: Implement a feature to export the flattened, tested `model_limits_cache.json` results directly to a CSV or Excel file for data scientists to analyze offline.
+- **Dynamic Pinned Columns**: Allow users to drag-and-drop or configure which metadata columns they want pinned to the left edge, saving these preferences to LocalStorage.
