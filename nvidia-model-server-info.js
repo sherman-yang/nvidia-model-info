@@ -559,6 +559,36 @@ app.get("/api/models-with-metadata", async (req, res) => {
   }
 });
 
+app.post("/api/reset-cache", express.json(), (req, res) => {
+  const { models } = req.body;
+  if (!Array.isArray(models)) return res.status(400).json({ error: "models array required" });
+
+  try {
+    const cacheFile = path.join(__dirname, "model_limits_cache.json");
+    let testCache = {};
+    if (fs.existsSync(cacheFile)) {
+      testCache = JSON.parse(fs.readFileSync(cacheFile, "utf8"));
+    }
+
+    let modified = false;
+    for (const modelId of models) {
+      if (testCache[modelId]) {
+        delete testCache[modelId];
+        modified = true;
+      }
+    }
+
+    if (modified) {
+      fs.writeFileSync(cacheFile, JSON.stringify(testCache, null, 2), "utf8");
+      cache.payload = null; // Invalidate memory cache
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Failed to reset cache:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get("/api/test-model", async (req, res) => {
   const modelId = req.query.model;
   if (!modelId) return res.status(400).json({ error: "Missing model parameter" });

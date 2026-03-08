@@ -300,11 +300,19 @@ async function runLiveTest(row, btn, isRetry = false) {
     row.contextLength = "Not Tested";
     row.maxOutputTokens = "Not Tested";
     row.testedAt = "";
+    row.testState = isRetry ? "retrying" : "testing";
     
-    // Preserve "error" state so Active Models tally doesn't bounce around during single re-tests
-    if (row.testState !== "error") {
-      row.testState = isRetry ? "retrying" : "testing";
+    if (!isRetry && !isBatchTesting) {
+      // Clear cache on backend immediately if this is a standalone manual click
+      try {
+        await fetch("/api/reset-cache", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ models: [row.modelId] })
+        });
+      } catch (e) {}
     }
+
     // Force a re-render so text turns blue/orange immediately
     render();
 
@@ -366,6 +374,7 @@ async function runBatchTest(force = false) {
   const signal = batchTestAbortController.signal;
 
   // Pre-clear all target rows so the user instantly sees the entire queue mapped out
+  const rowsToClear = [];
   for (const row of visibleRows) {
     const hasNumericLimits = typeof row.contextLength === 'number' && typeof row.maxOutputTokens === 'number';
     const isAlreadyTestedOk = row.liveTest && typeof row.liveTest === 'string' && row.liveTest.includes("ms") && hasNumericLimits;
@@ -376,14 +385,24 @@ async function runBatchTest(force = false) {
       row.contextLength = "Not Tested";
       row.maxOutputTokens = "Not Tested";
       row.testedAt = "";
-      
-      // Preserve "error" state so the Active Models count doesn't temporarily inflate 
-      // when a previously failed model is queued for a re-test.
-      if (row.testState !== "error") {
-        row.testState = "";
-      }
+      row.testState = "";
+      rowsToClear.push(row.modelId);
     }
   }
+
+  // Tell backend to clear cache for these models before starting so it survives a refresh
+  if (rowsToClear.length > 0) {
+    try {
+      await fetch("/api/reset-cache", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ models: rowsToClear })
+      });
+    } catch (e) {
+      console.error("Failed to reset cache on backend", e);
+    }
+  }
+
   render();
 
   let count = 0;
@@ -571,10 +590,10 @@ function renderStatus(visibleRows) {
   const keyLabel = state.apiKeyConfigured ? "Configured" : "Not Configured";
   const totalLabel = state.totalModelCount > 0 ? state.totalModelCount : state.modelCount;
 
-  // Calculate dynamic active model count by excluding tested failures
+  // Calculate dynamic active model count by ONLY counting explicitly successful models
   let dynamicActiveCount = 0;
   for (const row of state.rows) {
-    if (row.testState !== "error") {
+    if (row.testState === "success" || row.testState === "warning") {
       dynamicActiveCount++;
     }
   }
