@@ -562,8 +562,16 @@ function renderStatus(visibleRows) {
   const keyLabel = state.apiKeyConfigured ? "Configured" : "Not Configured";
   const totalLabel = state.totalModelCount > 0 ? state.totalModelCount : state.modelCount;
 
+  // Calculate dynamic active model count by excluding tested failures
+  let dynamicActiveCount = 0;
+  for (const row of state.rows) {
+    if (row.testState !== "error") {
+      dynamicActiveCount++;
+    }
+  }
+
   setStatus(
-    `Active Models: ${state.modelCount} / Total: ${totalLabel} | Displaying: ${visibleRows} | Filtered: ${state.filteredOutCount} | Sort: ${sortLabel} | API Key: ${keyLabel} | Data from: ${fetchedAtLabel}`
+    `Active Models: ${dynamicActiveCount} / Total: ${totalLabel} | Displaying: ${visibleRows} | Filtered: ${state.filteredOutCount} | Sort: ${sortLabel} | API Key: ${keyLabel} | Data from: ${fetchedAtLabel}`
   );
 }
 
