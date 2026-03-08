@@ -339,7 +339,7 @@ async function runLiveTest(row, btn, isRetry = false) {
     // Force a re-render
     render();
   } catch (e) {
-    // True network failure — update row to show error state
+    // True network failure - update row to show error state
     row.liveTest = "Error";
     row.contextLength = "Error";
     row.maxOutputTokens = "Error";
@@ -466,7 +466,7 @@ async function runBatchTest(force = false) {
         const retryBtn = document.querySelector(`tr[data-model-id="${row.modelId}"] .live-test-btn`);
         console.log(`[batch] ${row.modelId}: executing retry now`);
         await runLiveTest(row, retryBtn, true);
-        console.log(`[batch] ${row.modelId}: retry done — ctx=${row.contextLength}, out=${row.maxOutputTokens}`);
+        console.log(`[batch] ${row.modelId}: retry done - ctx=${row.contextLength}, out=${row.maxOutputTokens}`);
       }
     }
 
