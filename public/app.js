@@ -300,7 +300,11 @@ async function runLiveTest(row, btn, isRetry = false) {
     row.contextLength = "Not Tested";
     row.maxOutputTokens = "Not Tested";
     row.testedAt = "";
-    row.testState = isRetry ? "retrying" : "testing";
+    
+    // Preserve "error" state so Active Models tally doesn't bounce around during single re-tests
+    if (row.testState !== "error") {
+      row.testState = isRetry ? "retrying" : "testing";
+    }
     // Force a re-render so text turns blue/orange immediately
     render();
 
@@ -372,7 +376,12 @@ async function runBatchTest(force = false) {
       row.contextLength = "Not Tested";
       row.maxOutputTokens = "Not Tested";
       row.testedAt = "";
-      row.testState = "";
+      
+      // Preserve "error" state so the Active Models count doesn't temporarily inflate 
+      // when a previously failed model is queued for a re-test.
+      if (row.testState !== "error") {
+        row.testState = "";
+      }
     }
   }
   render();
