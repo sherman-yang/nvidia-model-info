@@ -272,6 +272,7 @@ function makeHeaderLabel(columnKey) {
   if (columnKey === "contextLength") return "Context Limit";
   if (columnKey === "maxOutputTokens") return "Max Output";
   if (columnKey === "latencyMs") return "Latency (ms)";
+  if (columnKey === "testedAt") return "Tested At";
   return columnKey;
 }
 
@@ -292,6 +293,13 @@ async function runLiveTest(row, btn, isRetry = false) {
       btn.disabled = true;
       btn.textContent = isRetry ? "Retrying..." : "Testing...";
     }
+    
+    // Instantly clear limits to visually indicate a test is in-flight/queued
+    row.liveTest = "Test";
+    row.latencyMs = "";
+    row.contextLength = "Not Tested";
+    row.maxOutputTokens = "Not Tested";
+    row.testedAt = "";
     row.testState = isRetry ? "retrying" : "testing";
     // Force a re-render so text turns blue/orange immediately
     render();
@@ -306,6 +314,7 @@ async function runLiveTest(row, btn, isRetry = false) {
     row.latencyMs = data.latencyMs;
     row.contextLength = data.contextLength;
     row.maxOutputTokens = data.maxOutputTokens;
+    row.testedAt = data.testedAt || "";
 
     // Determine state
     if (!data.isAvailable) {
@@ -322,6 +331,7 @@ async function runLiveTest(row, btn, isRetry = false) {
     row.liveTest = "Error";
     row.contextLength = "Error";
     row.maxOutputTokens = "Error";
+    row.testedAt = "";
     row.testState = "error";
     render();
     console.error(e);
@@ -350,6 +360,22 @@ async function runBatchTest(force = false) {
   batchProgressContainer.hidden = false;
   batchTestAbortController = new AbortController();
   const signal = batchTestAbortController.signal;
+
+  // Pre-clear all target rows so the user instantly sees the entire queue mapped out
+  for (const row of visibleRows) {
+    const hasNumericLimits = typeof row.contextLength === 'number' && typeof row.maxOutputTokens === 'number';
+    const isAlreadyTestedOk = row.liveTest && typeof row.liveTest === 'string' && row.liveTest.includes("ms") && hasNumericLimits;
+    
+    if (force || !isAlreadyTestedOk) {
+      row.liveTest = "Test";
+      row.latencyMs = "";
+      row.contextLength = "Not Tested";
+      row.maxOutputTokens = "Not Tested";
+      row.testedAt = "";
+      row.testState = "";
+    }
+  }
+  render();
 
   let count = 0;
   for (const row of visibleRows) {
