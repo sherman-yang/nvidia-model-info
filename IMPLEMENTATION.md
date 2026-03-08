@@ -34,7 +34,8 @@ The application consists of a Node.js Express backend and a vanilla HTML/CSS/Jav
 
 5. **Live Test Endpoint** (`/api/test-model`):
    - Sends a minimal `max_tokens: 1` request to measure latency and availability.
-   - Sends an oversized `max_tokens: 99999999` request to trigger error messages that reveal the model's actual context length and max output token limits.
+   - If the model is marked as unavailable (e.g. 401 or 404), the limit probing is immediately skipped, defaulting the limits to `"Inactive"` to prevent displaying false-positive limits.
+   - If available, sends an oversized `max_tokens: 99999999` request to trigger error messages that reveal the model's actual context length and max output token limits.
    - Parses error messages with multiple regex patterns to extract limits from varied error formats across different model providers.
    - Falls back: if `contextLength` is found but not `maxOutputTokens`, defaults to `min(4096, contextLength)`. The reverse also applies.
    - Persists the result to `model_limits_cache.json` and invalidates the in-memory cache.
@@ -64,8 +65,8 @@ The application consists of a Node.js Express backend and a vanilla HTML/CSS/Jav
    - Clicking headers toggles ascending/descending sorting, implemented by standardizing numbers vs text mapping (`compareValues`).
 
 4. **Live Testing**:
-   - `runLiveTest(row, btn)`: Tests a single model via `/api/test-model` and updates the row in-place.
-   - `runBatchTest(force)`: Iterates over all visible rows sequentially, calling `runLiveTest` with a 3.5s delay between tests to respect rate limits. Models that were tested but didn't get numeric limits are automatically retested. If a test fails to detect numeric limits, it retries once after a 3.5s delay. Provides a progress bar and abort capability.
+   - `runLiveTest(row, btn)`: Tests a single model via `/api/test-model` and updates the row in-place. Single tests do not automatically retry on failure.
+   - `runBatchTest(force)`: Iterates over all visible rows sequentially, calling `runLiveTest` with a 3.5s delay between tests to respect rate limits. To aggressively protect against false negatives (like temporary 429 Rate Limits masquerading as missing limits), **any test that fails to detect a strictly numeric token limit** (including `Error`, `Inactive`, and `No Limit Reported`) will automatically wait 3.5s and retry exactly once. Provides a progress bar and abort capability.
 
 5. **Usage Code Generation (`buildUsageSnippets`)**:
    - When the user right-clicks a row, a popup context window (`#usage-popover`) is shown.
