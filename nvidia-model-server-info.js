@@ -660,7 +660,7 @@ app.get("/api/test-model", async (req, res) => {
         contextLength = parseInt(errorBody.match(/max_model_len=\s*(\d+)/i)[1], 10);
       }
     } else if (rLimit.ok) {
-      // Model accepted the oversized max_tokens without error — no enforced limit
+      // Model accepted the oversized max_tokens without error - no enforced limit
       if (!contextLength) contextLength = "No Limit Reported";
       if (!maxOutputTokens) maxOutputTokens = "No Limit Reported";
     }
