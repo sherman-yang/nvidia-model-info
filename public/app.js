@@ -570,8 +570,12 @@ function renderStatus(visibleRows) {
     }
   }
 
+  // Calculate how many *active* models are currently hidden by frontend filters
+  // (Search string or Exclude checkbox)
+  const dynamicallyFilteredCount = Math.max(0, dynamicActiveCount - visibleRows);
+
   setStatus(
-    `Active Models: ${dynamicActiveCount} / Total: ${totalLabel} | Displaying: ${visibleRows} | Filtered: ${state.filteredOutCount} | Sort: ${sortLabel} | API Key: ${keyLabel} | Data from: ${fetchedAtLabel}`
+    `Active Models: ${dynamicActiveCount} / Total: ${totalLabel} | Displaying: ${visibleRows} | Filtered: ${dynamicallyFilteredCount} | Sort: ${sortLabel} | API Key: ${keyLabel} | Data from: ${fetchedAtLabel}`
   );
 }
 
