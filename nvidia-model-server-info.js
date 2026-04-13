@@ -3,7 +3,7 @@ const path = require("node:path");
 const fs = require("node:fs");
 const { exec } = require("node:child_process");
 
-const API_KEY_ENV_NAME = "Sherman_NVDA_test";
+const API_KEY_ENV_NAME = "NVIDIA_API_KEY";
 
 const app = express();
 
@@ -20,7 +20,43 @@ if (typeof fetch !== "function") {
 const cache = {
   expiresAt: 0,
   payload: null,
-  inFlight: null
+  inFlight: null,
+  loadToken: 0
+};
+
+const TOOL_SUPPORT_REQUEST_BODY = {
+  messages: [
+    {
+      role: "user",
+      content: "Call the tool exactly once with location set to Calgary. Do not answer normally."
+    }
+  ],
+  tools: [
+    {
+      type: "function",
+      function: {
+        name: "get_weather",
+        description: "Get weather for a location.",
+        parameters: {
+          type: "object",
+          properties: {
+            location: {
+              type: "string"
+            }
+          },
+          required: ["location"]
+        }
+      }
+    }
+  ],
+  tool_choice: {
+    type: "function",
+    function: {
+      name: "get_weather"
+    }
+  },
+  temperature: 0,
+  max_tokens: 64
 };
 
 function getApiKey() {
@@ -83,6 +119,34 @@ function withTimeout(signal, timeoutMs) {
   };
 }
 
+function parseResponseBodyText(bodyText) {
+  if (!bodyText) {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(bodyText);
+  } catch {
+    return bodyText;
+  }
+}
+
+function invalidateCachedPayload({ dropInFlight = false } = {}) {
+  cache.payload = null;
+  cache.expiresAt = 0;
+  cache.loadToken += 1;
+
+  if (dropInFlight) {
+    cache.inFlight = null;
+  }
+}
+
+function clearAllCachedData() {
+  const cacheFile = path.join(__dirname, "model_limits_cache.json");
+  fs.writeFileSync(cacheFile, "{}\n", "utf8");
+  invalidateCachedPayload({ dropInFlight: true });
+}
+
 async function fetchJson(url, { signal } = {}) {
   const timeoutWrap = withTimeout(signal, REQUEST_TIMEOUT_MS);
 
@@ -94,15 +158,7 @@ async function fetchJson(url, { signal } = {}) {
     });
 
     const bodyText = await response.text();
-    let body;
-
-    if (bodyText) {
-      try {
-        body = JSON.parse(bodyText);
-      } catch {
-        body = bodyText;
-      }
-    }
+    const body = parseResponseBodyText(bodyText);
 
     if (!response.ok) {
       const errorBody =
@@ -228,6 +284,8 @@ function toRow(listModel, metadata) {
 
   row.liveTest = "Test"; // Placeholder for the frontend button
   row.latencyMs = ""; // Populated by live test
+  row.toolSupport = ""; // Populated by live test
+  row.toolSupportChecked = false; // Internal marker used to decide whether re-testing is needed
   row.testedAt = ""; // Populated by live test
 
   return row;
@@ -428,13 +486,15 @@ function buildColumns(rows) {
     "contextLength",
     "maxOutputTokens",
     "latencyMs",
+    "toolSupport",
     "testedAt"
   ];
 
   const hiddenFields = new Set([
     "metadata.id",
     "metadata.object",
-    "listObject"
+    "listObject",
+    "toolSupportChecked"
   ]);
 
   const keySet = new Set();
@@ -460,11 +520,14 @@ async function loadModelsWithMetadata({ forceRefresh = false } = {}) {
     return cache.payload;
   }
 
-  if (cache.inFlight) {
+  if (!forceRefresh && cache.inFlight) {
     return cache.inFlight;
   }
 
-  cache.inFlight = (async () => {
+  const loadToken = cache.loadToken + 1;
+  cache.loadToken = loadToken;
+
+  const currentPromise = (async () => {
     let testCache = {};
     try {
       const cacheFilePath = path.join(__dirname, "model_limits_cache.json");
@@ -486,6 +549,8 @@ async function loadModelsWithMetadata({ forceRefresh = false } = {}) {
           row.contextLength = tc.contextLength;
           row.maxOutputTokens = tc.maxOutputTokens;
           row.latencyMs = tc.latencyMs >= 0 ? tc.latencyMs : "";
+          row.toolSupport = tc.toolSupportChecked ? Boolean(tc.toolSupport) : "";
+          row.toolSupportChecked = Boolean(tc.toolSupportChecked);
           row.testedAt = tc.testedAt || "";
           
           if (tc.contextLength === "Error") {
@@ -523,16 +588,50 @@ async function loadModelsWithMetadata({ forceRefresh = false } = {}) {
       rows
     };
 
-    cache.payload = payload;
-    cache.expiresAt = Date.now() + CACHE_TTL_MS;
+    if (cache.loadToken === loadToken) {
+      cache.payload = payload;
+      cache.expiresAt = Date.now() + CACHE_TTL_MS;
+    }
+
     return payload;
   })();
 
+  cache.inFlight = currentPromise;
+
   try {
-    return await cache.inFlight;
+    return await currentPromise;
   } finally {
-    cache.inFlight = null;
+    if (cache.inFlight === currentPromise) {
+      cache.inFlight = null;
+    }
   }
+}
+
+function persistTestResult(modelId, result) {
+  try {
+    const cacheFile = path.join(__dirname, "model_limits_cache.json");
+    let testCache = {};
+    if (fs.existsSync(cacheFile)) {
+      testCache = JSON.parse(fs.readFileSync(cacheFile, "utf8"));
+    }
+    testCache[modelId] = result;
+    fs.writeFileSync(cacheFile, JSON.stringify(testCache, null, 2), "utf8");
+    invalidateCachedPayload();
+  } catch (e) {
+    console.error("Failed to save test cache:", e.message);
+  }
+}
+
+function hasToolCallInResponse(body) {
+  if (!body || typeof body !== "object") {
+    return false;
+  }
+
+  const choice = Array.isArray(body.choices) ? body.choices[0] : null;
+  const message = choice && choice.message && typeof choice.message === "object" ? choice.message : null;
+  const toolCalls = Array.isArray(message?.tool_calls) ? message.tool_calls : [];
+
+  return toolCalls.length > 0 || Boolean(message?.function_call);
 }
 
 app.use(express.static(path.join(__dirname, "public")));
@@ -559,6 +658,16 @@ app.get("/api/models-with-metadata", async (req, res) => {
   }
 });
 
+app.post("/api/reset-all-cache", (_req, res) => {
+  try {
+    clearAllCachedData();
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Failed to reset all cache:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post("/api/reset-cache", express.json(), (req, res) => {
   const { models } = req.body;
   if (!Array.isArray(models)) return res.status(400).json({ error: "models array required" });
@@ -580,7 +689,7 @@ app.post("/api/reset-cache", express.json(), (req, res) => {
 
     if (modified) {
       fs.writeFileSync(cacheFile, JSON.stringify(testCache, null, 2), "utf8");
-      cache.payload = null; // Invalidate memory cache
+      invalidateCachedPayload();
     }
     res.json({ success: true });
   } catch (err) {
@@ -600,6 +709,8 @@ app.get("/api/test-model", async (req, res) => {
   let isAvailable = false;
   let contextLength = null;
   let maxOutputTokens = null;
+  let toolSupport = "";
+  let toolSupportChecked = false;
 
   try {
     // 1. Test Latency & Availability
@@ -670,6 +781,39 @@ app.get("/api/test-model", async (req, res) => {
       if (contextLength && !maxOutputTokens) maxOutputTokens = Math.min(4096, contextLength);
       // Conversely, if we found max completion tokens but not context, context is at least that size.
       if (!contextLength && maxOutputTokens) contextLength = maxOutputTokens;
+
+      // 3. Probe explicit function/tool calling support.
+      try {
+        const timeoutTool = withTimeout(null, 15000);
+        const rTool = await fetch(url, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            model: modelId,
+            ...TOOL_SUPPORT_REQUEST_BODY
+          }),
+          signal: timeoutTool.signal
+        });
+
+        const toolBodyText = await rTool.text();
+        timeoutTool.clear();
+        const toolBody = parseResponseBodyText(toolBodyText);
+        toolSupportChecked = true;
+
+        if (rTool.ok) {
+          toolSupport = hasToolCallInResponse(toolBody);
+        } else {
+          const toolErrorText =
+            typeof toolBody === "string" ? toolBody : JSON.stringify(toolBody ?? {});
+          toolSupport = false;
+
+          if (!/tool|function_call|tool_calls|unsupported|not been enabled/i.test(toolErrorText)) {
+            console.warn(`Tool support probe returned non-standard error for ${modelId}: ${toolErrorText}`);
+          }
+        }
+      } catch (toolError) {
+        console.warn(`Tool support probe failed for ${modelId}: ${toolError.message}`);
+      }
     }
 
   } catch (error) {
@@ -680,20 +824,11 @@ app.get("/api/test-model", async (req, res) => {
       isAvailable: false,
       contextLength: "Error",
       maxOutputTokens: "Error",
+      toolSupport: "",
+      toolSupportChecked: false,
       testedAt: new Date().toLocaleString()
     };
-    try {
-      const cacheFile = path.join(__dirname, "model_limits_cache.json");
-      let testCache = {};
-      if (fs.existsSync(cacheFile)) {
-        testCache = JSON.parse(fs.readFileSync(cacheFile, "utf8"));
-      }
-      testCache[modelId] = errResult;
-      fs.writeFileSync(cacheFile, JSON.stringify(testCache, null, 2), "utf8");
-      cache.payload = null;
-    } catch (e) {
-      console.error("Failed to save error test cache:", e.message);
-    }
+    persistTestResult(modelId, errResult);
     return res.json(errResult);
   }
 
@@ -704,23 +839,12 @@ app.get("/api/test-model", async (req, res) => {
     isAvailable,
     contextLength: contextLength || fallbackLabel,
     maxOutputTokens: maxOutputTokens || fallbackLabel,
+    toolSupport,
+    toolSupportChecked,
     testedAt: new Date().toLocaleString()
   };
 
-  // Persist result to cache file
-  try {
-    const cacheFile = path.join(__dirname, "model_limits_cache.json");
-    let testCache = {};
-    if (fs.existsSync(cacheFile)) {
-      testCache = JSON.parse(fs.readFileSync(cacheFile, "utf8"));
-    }
-    testCache[modelId] = result;
-    fs.writeFileSync(cacheFile, JSON.stringify(testCache, null, 2), "utf8");
-    // Invalidate the in-memory models payload so the next refresh picks up the new cache
-    cache.payload = null;
-  } catch (e) {
-    console.error("Failed to save test cache:", e.message);
-  }
+  persistTestResult(modelId, result);
 
   res.json(result);
 });

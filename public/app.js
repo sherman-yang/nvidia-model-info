@@ -1,6 +1,7 @@
 const statusEl = document.getElementById("status");
 const searchInput = document.getElementById("search-input");
 const filterInactiveChk = document.getElementById("filter-inactive-chk");
+const filterToolSupportChk = document.getElementById("filter-tool-support-chk");
 const refreshBtn = document.getElementById("refresh-btn");
 const testDisplayedBtn = document.getElementById("test-displayed-btn");
 const batchProgressContainer = document.getElementById("batch-progress-container");
@@ -31,6 +32,7 @@ const state = {
   apiKeyConfigured: false,
   filterText: "",
   excludeInactive: false,
+  toolSupportOnly: false,
   sortKey: "modelId",
   sortDirection: "asc",
   activeUsageModelId: ""
@@ -142,13 +144,13 @@ function buildUsageSnippets(row) {
 
   const curlPayloadForShell = payloadJsonCompact.replace(/'/g, "'\"'\"'");
   const curl = `curl -X POST "${CHAT_COMPLETIONS_URL}" \\
-  -H "Authorization: Bearer $Sherman_NVDA_test" \\
+  -H "Authorization: Bearer $NVIDIA_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '${curlPayloadForShell}'`;
 
-  const python = `import os\nimport requests\n\nurl = "${CHAT_COMPLETIONS_URL}"\nheaders = {\n    "Authorization": f"Bearer {os.environ['Sherman_NVDA_test']}",\n    "Content-Type": "application/json"\n}\npayload = ${payloadJson}\n\nresp = requests.post(url, headers=headers, json=payload, timeout=60)\nresp.raise_for_status()\nprint(resp.json())`;
+  const python = `import os\nimport requests\n\nurl = "${CHAT_COMPLETIONS_URL}"\nheaders = {\n    "Authorization": f"Bearer {os.environ['NVIDIA_API_KEY']}",\n    "Content-Type": "application/json"\n}\npayload = ${payloadJson}\n\nresp = requests.post(url, headers=headers, json=payload, timeout=60)\nresp.raise_for_status()\nprint(resp.json())`;
 
-  const javascript = `const url = "${CHAT_COMPLETIONS_URL}";\nconst payload = ${payloadJson};\n\nconst resp = await fetch(url, {\n  method: "POST",\n  headers: {\n    Authorization: \`Bearer \${process.env.Sherman_NVDA_test}\`,\n    "Content-Type": "application/json"\n  },\n  body: JSON.stringify(payload)\n});\n\nif (!resp.ok) {\n  throw new Error(\`HTTP \${resp.status}: \${await resp.text()}\`);\n}\n\nconsole.log(await resp.json());`;
+  const javascript = `const url = "${CHAT_COMPLETIONS_URL}";\nconst payload = ${payloadJson};\n\nconst resp = await fetch(url, {\n  method: "POST",\n  headers: {\n    Authorization: \`Bearer \${process.env.NVIDIA_API_KEY}\`,\n    "Content-Type": "application/json"\n  },\n  body: JSON.stringify(payload)\n});\n\nif (!resp.ok) {\n  throw new Error(\`HTTP \${resp.status}: \${await resp.text()}\`);\n}\n\nconsole.log(await resp.json());`;
 
   return {
     modelId,
@@ -175,7 +177,7 @@ function showUsagePopover(row, clientX, clientY) {
 
   usageTitle.textContent = "Model Usage Examples";
   usageSubtitle.textContent = `Model: ${usage.modelId}`;
-  usageMeta.textContent = `context_length: ${usage.contextLengthText} | max_output_tokens: ${usage.maxOutputText} | API Key Env Var: Sherman_NVDA_test`;
+  usageMeta.textContent = `context_length: ${usage.contextLengthText} | max_output_tokens: ${usage.maxOutputText} | API Key Env Var: NVIDIA_API_KEY`;
   usageCurl.textContent = usage.snippets.curl;
   usagePython.textContent = usage.snippets.python;
   usageJavascript.textContent = usage.snippets.javascript;
@@ -210,40 +212,36 @@ async function copyTextToClipboard(text) {
 
 function getFilteredAndSortedRows() {
   const filter = state.filterText.trim().toLowerCase();
-
-  const filtered = filter
-    ? state.rows.filter((row) => {
-      // Handle the Ignore Inactive/Error checkbox 
-      if (state.excludeInactive) {
-        const isError = row.liveTest === "Error" || row.contextLength === "Error" || row.maxOutputTokens === "Error";
-        const isInactive = row.liveTest === "Inactive" || row.contextLength === "Inactive" || row.maxOutputTokens === "Inactive";
-        if (isError || isInactive) {
-          return false;
-        }
+  const filtered = state.rows.filter((row) => {
+    if (state.excludeInactive) {
+      const isError = row.liveTest === "Error" || row.contextLength === "Error" || row.maxOutputTokens === "Error";
+      const isInactive = row.liveTest === "Inactive" || row.contextLength === "Inactive" || row.maxOutputTokens === "Inactive";
+      if (isError || isInactive) {
+        return false;
       }
+    }
 
-      for (const key of state.columns) {
-        const value = row[key];
-        if (value === null || value === undefined) {
-          continue;
-        }
-
-        if (String(value).toLowerCase().includes(filter)) {
-          return true;
-        }
-      }
+    if (state.toolSupportOnly && row.toolSupport !== true) {
       return false;
-    })
-    : state.rows.filter((row) => {
-      if (state.excludeInactive) {
-        const isError = row.liveTest === "Error" || row.contextLength === "Error" || row.maxOutputTokens === "Error";
-        const isInactive = row.liveTest === "Inactive" || row.contextLength === "Inactive" || row.maxOutputTokens === "Inactive";
-        if (isError || isInactive) {
-          return false;
-        }
-      }
+    }
+
+    if (!filter) {
       return true;
-    });
+    }
+
+    for (const key of state.columns) {
+      const value = row[key];
+      if (value === null || value === undefined) {
+        continue;
+      }
+
+      if (String(value).toLowerCase().includes(filter)) {
+        return true;
+      }
+    }
+
+    return false;
+  });
 
   filtered.sort((a, b) => {
     const compareResult = compareValues(a[state.sortKey], b[state.sortKey]);
@@ -272,6 +270,7 @@ function makeHeaderLabel(columnKey) {
   if (columnKey === "contextLength") return "Context Limit";
   if (columnKey === "maxOutputTokens") return "Max Output";
   if (columnKey === "latencyMs") return "Latency (ms)";
+  if (columnKey === "toolSupport") return "Tool Support";
   if (columnKey === "testedAt") return "Tested At";
   return columnKey;
 }
@@ -299,6 +298,8 @@ async function runLiveTest(row, btn, isRetry = false) {
     row.latencyMs = "";
     row.contextLength = "Not Tested";
     row.maxOutputTokens = "Not Tested";
+    row.toolSupport = "";
+    row.toolSupportChecked = false;
     row.testedAt = "";
     row.testState = isRetry ? "retrying" : "testing";
     
@@ -326,6 +327,8 @@ async function runLiveTest(row, btn, isRetry = false) {
     row.latencyMs = data.latencyMs;
     row.contextLength = data.contextLength;
     row.maxOutputTokens = data.maxOutputTokens;
+    row.toolSupport = data.toolSupportChecked ? Boolean(data.toolSupport) : "";
+    row.toolSupportChecked = Boolean(data.toolSupportChecked);
     row.testedAt = data.testedAt || "";
 
     // Determine state
@@ -343,6 +346,8 @@ async function runLiveTest(row, btn, isRetry = false) {
     row.liveTest = "Error";
     row.contextLength = "Error";
     row.maxOutputTokens = "Error";
+    row.toolSupport = "";
+    row.toolSupportChecked = false;
     row.testedAt = "";
     row.testState = "error";
     render();
@@ -377,13 +382,20 @@ async function runBatchTest(force = false) {
   const rowsToClear = [];
   for (const row of visibleRows) {
     const hasNumericLimits = typeof row.contextLength === 'number' && typeof row.maxOutputTokens === 'number';
-    const isAlreadyTestedOk = row.liveTest && typeof row.liveTest === 'string' && row.liveTest.includes("ms") && hasNumericLimits;
+    const isAlreadyTestedOk =
+      row.liveTest &&
+      typeof row.liveTest === 'string' &&
+      row.liveTest.includes("ms") &&
+      hasNumericLimits &&
+      row.toolSupportChecked === true;
     
     if (force || !isAlreadyTestedOk) {
       row.liveTest = "Test";
       row.latencyMs = "";
       row.contextLength = "Not Tested";
       row.maxOutputTokens = "Not Tested";
+      row.toolSupport = "";
+      row.toolSupportChecked = false;
       row.testedAt = "";
       row.testState = "";
       rowsToClear.push(row.modelId);
@@ -412,7 +424,14 @@ async function runBatchTest(force = false) {
     // Skip if already tested with numeric limits, unless forcing
     // Models that were tested but got non-numeric results (Error, No Limit Reported, etc.) are retested
     const hasNumericLimits = typeof row.contextLength === 'number' && typeof row.maxOutputTokens === 'number';
-    if (!force && row.liveTest && typeof row.liveTest === 'string' && row.liveTest.includes("ms") && hasNumericLimits) {
+    if (
+      !force &&
+      row.liveTest &&
+      typeof row.liveTest === 'string' &&
+      row.liveTest.includes("ms") &&
+      hasNumericLimits &&
+      row.toolSupportChecked === true
+    ) {
       count++;
       batchProgress.value = count;
       continue;
@@ -420,7 +439,7 @@ async function runBatchTest(force = false) {
 
     count++;
     batchProgress.value = count;
-    batchStatus.textContent = `Batch testing ${force ? '(Forced) ' : ''}${count}/${visibleRows.length}: ${row.modelId}... (3.5s delay to avoid rate limits)`;
+    batchStatus.textContent = `Batch testing ${force ? '(Forced) ' : ''}${count}/${visibleRows.length}: ${row.modelId}... (5s delay to avoid rate limits)`;
 
     const tr = document.querySelector(`tr[data-model-id="${row.modelId}"]`);
     const btn = tr ? tr.querySelector('.live-test-btn') : null;
@@ -436,7 +455,7 @@ async function runBatchTest(force = false) {
 
     if (needsRetry && !signal.aborted) {
       // Update batchStatus text — this element is NEVER destroyed by render()
-      batchStatus.textContent = `⟳ Retrying ${count}/${visibleRows.length}: ${row.modelId}... (waiting 3.5s)`;
+      batchStatus.textContent = `⟳ Retrying ${count}/${visibleRows.length}: ${row.modelId}... (waiting 5s)`;
 
       // Re-query button from fresh DOM (render() rebuilt the table)
       const freshBtn = document.querySelector(`tr[data-model-id="${row.modelId}"] .live-test-btn`);
@@ -446,12 +465,12 @@ async function runBatchTest(force = false) {
         freshBtn.disabled = false;
       }
 
-      console.log(`[batch] ${row.modelId}: retrying in 3.5s, freshBtn found: ${!!freshBtn}`);
+      console.log(`[batch] ${row.modelId}: retrying in 5s, freshBtn found: ${!!freshBtn}`);
 
       // Wait before retry
       try {
         await new Promise((resolve, reject) => {
-          const timeout = setTimeout(resolve, 3500);
+          const timeout = setTimeout(resolve, 5000);
           signal.addEventListener('abort', () => {
             clearTimeout(timeout);
             reject(new Error('Aborted'));
@@ -470,11 +489,11 @@ async function runBatchTest(force = false) {
       }
     }
 
-    // Wait ~3500ms before next test to stay under 40 requests/min
+    // Wait ~5000ms before next test to stay under 40 requests/min
     if (count < visibleRows.length && !signal.aborted) {
       try {
         await new Promise((resolve, reject) => {
-          const timeout = setTimeout(resolve, 3500);
+          const timeout = setTimeout(resolve, 5000);
           signal.addEventListener('abort', () => {
             clearTimeout(timeout);
             reject(new Error('Aborted'));
@@ -566,6 +585,8 @@ function renderTableBody(rows) {
         td.appendChild(btn);
       } else if (columnKey === "contextLength" || columnKey === "maxOutputTokens") {
         td.textContent = value === null || value === undefined ? "" : formatTokensToK(value);
+      } else if (columnKey === "toolSupport") {
+        td.textContent = row.toolSupportChecked === true ? (value === true ? "true" : "false") : "";
       } else {
         td.textContent = value === null || value === undefined ? "" : String(value);
       }
@@ -616,6 +637,28 @@ function render() {
   renderStatus(visibleRows.length);
 }
 
+function stopBatchTestingUi() {
+  if (batchTestAbortController) {
+    batchTestAbortController.abort();
+  }
+
+  isBatchTesting = false;
+  testDisplayedBtn.textContent = "Test Displayed Models";
+  testDisplayedBtn.style.backgroundColor = "";
+  batchProgressContainer.hidden = true;
+}
+
+function clearDisplayedData() {
+  hideUsagePopover();
+  state.columns = [];
+  state.rows = [];
+  state.fetchedAt = null;
+  state.modelCount = 0;
+  state.totalModelCount = 0;
+  state.filteredOutCount = 0;
+  render();
+}
+
 async function loadData(forceRefresh = false) {
   if (state.loading) {
     return;
@@ -623,9 +666,24 @@ async function loadData(forceRefresh = false) {
 
   state.loading = true;
   refreshBtn.disabled = true;
-  setStatus("Loading model list and metadata, please wait...");
+  setStatus(forceRefresh ? "Resetting all cached data and reloading fresh model list..." : "Loading model list and metadata, please wait...");
 
   try {
+    if (forceRefresh) {
+      stopBatchTestingUi();
+      clearDisplayedData();
+      setStatus("Resetting all cached data and reloading fresh model list...");
+
+      const resetResponse = await fetch("/api/reset-all-cache", {
+        method: "POST"
+      });
+
+      if (!resetResponse.ok) {
+        const resetBodyText = await resetResponse.text();
+        throw new Error(`Reset failed: HTTP ${resetResponse.status}: ${resetBodyText}`);
+      }
+    }
+
     const url = forceRefresh ? "/api/models-with-metadata?refresh=1" : "/api/models-with-metadata";
     const response = await fetch(url);
 
@@ -646,6 +704,8 @@ async function loadData(forceRefresh = false) {
 
     // Reconstruct the visual testState from the loaded string values
     state.rows.forEach(row => {
+      row.toolSupportChecked = row.toolSupportChecked === true;
+      row.toolSupport = row.toolSupportChecked ? row.toolSupport === true : "";
       const live = String(row.liveTest || "");
       if (live === "Test") {
         row.testState = "";
@@ -685,6 +745,11 @@ searchInput.addEventListener("input", (event) => {
 
 filterInactiveChk.addEventListener("change", (event) => {
   state.excludeInactive = event.target.checked;
+  render();
+});
+
+filterToolSupportChk.addEventListener("change", (event) => {
+  state.toolSupportOnly = event.target.checked;
   render();
 });
 

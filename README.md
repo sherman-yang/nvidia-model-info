@@ -16,12 +16,12 @@ This dashboard solves that pain point by:
 - **Active Models Only**: Automatically fetches and displays only models currently active and usable, filtering out anything deprecated, disabled, or retired.
 - **Detailed Metadata**: Calls `GET https://integrate.api.nvidia.com/v1/models/{publisher}/{model}` for each model automatically.
 - **Flattened Schema**: Explodes the nested metadata dictionaries into individual columns that are dynamically generated.
-- **High-Priority Properties Pinned**: The most critical fields (Live Ping, Model ID, Publisher, Context Limit, Max Output, and Latency) are pinned to the left table edge for easy reference.
-- **Live Ping & Limits Detection**: Click "Ping" on any model row to measure response latency and automatically detect context length and max output tokens via NVIDIA error response scraping. The button provides clear, real-time colored visual feedback (Testing, Retrying, Success, Error). Results are cached to `model_limits_cache.json` and persist across restarts.
-- **Batch Testing**: Click "Test Displayed Models" to test all visible models sequentially with rate-limit protection (3.5s delay). Hold Shift+Click to force re-test all models.
-- **Sorting & Filtering**: Click headers to swap ascending/descending sort. Use the global search box to perform a sub-string filter across all parameters, or toggle the "Exclude Inactive/Error" checkbox to instantly hide failed models.
+- **High-Priority Properties Pinned**: The most critical fields (Live Ping, Model ID, Publisher, Context Limit, Max Output, Latency, Tool Support, and Tested At) are pinned to the left table edge for easy reference.
+- **Live Ping & Capability Detection**: Click "Ping" on any model row to measure response latency, automatically detect context length and max output tokens via NVIDIA error response scraping, and probe whether the model supports tool calling. The button provides clear, real-time colored visual feedback (Testing, Retrying, Success, Error). Results are cached to `model_limits_cache.json` until you explicitly reset them with `Force Refresh Data`.
+- **Batch Testing**: Click "Test Displayed Models" to test all visible models sequentially with rate-limit protection (5s delay). Hold Shift+Click to force re-test all models.
+- **Sorting & Filtering**: Click headers to swap ascending/descending sort. Use the global search box to perform a sub-string filter across all parameters, toggle the "Exclude Inactive/Error" checkbox to instantly hide failed models, or enable the `tool support` checkbox to show only models that were verified to return tool calls.
 - **Code Snippets**: Right-click on any row to open an interactive popover showing fully constructed cURL, Python, and JavaScript payload examples for Chat completions logic tailored specifically to that model.
-- **Manual Refresh**: Click "Force Refresh Data" to re-fetch the latest model list and metadata from the NVIDIA API. The backend caches API results for 5 minutes to respect rate limits.
+- **Manual Refresh**: Click "Force Refresh Data" to drop all current test results, clear backend caches, and re-fetch the latest model list and metadata from the NVIDIA API with no reuse of cached results.
 - **System Theme Support**: Automatically follows the system light/dark mode preference.
 
 ## 🗂 Documentation (The Transit Hub)
@@ -38,7 +38,7 @@ This repository strictly adheres to a 4-document architecture. Please refer to t
 1. Install [Node.js](https://nodejs.org/) v18+
 2. Set your environment variable: 
    ```bash
-   export Sherman_NVDA_test="your_nvidia_api_key"
+   export NVIDIA_API_KEY="your_nvidia_api_key"
    ```
 3. Run the application exclusively using the start script:
    ```bash
@@ -48,7 +48,7 @@ This repository strictly adheres to a 4-document architecture. Please refer to t
 
 ## Configuration Options
 
-While the application primarily drives itself off `Sherman_NVDA_test`, you can inject system environment variables to tweak the Node.js backend:
+While the application primarily drives itself off `NVIDIA_API_KEY`, you can inject system environment variables to tweak the Node.js backend:
 - `PORT`: Sets the local webserver bind port (default: `4920`)
 - `MAX_CONCURRENCY`: Adjust the bounds of concurrent API fetching to build.nvidia.com (default: `12`)
 - `REQUEST_TIMEOUT_MS`: Individual HTTP fetch timeout boundary (default: `20000` ms)

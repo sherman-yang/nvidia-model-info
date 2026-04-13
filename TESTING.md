@@ -7,7 +7,7 @@ This document outlines the testing strategy, acceptance criteria, and quality ju
 
 ### 2.1 Environment Setup
 1. Ensure Node.js v18+ is installed.
-2. Export a valid NVIDIA API key to your environment: `export Sherman_NVDA_test="your_actual_key"`.
+2. Export a valid NVIDIA API key to your environment: `export NVIDIA_API_KEY="your_actual_key"`.
 3. Launch the application using `./start.sh`.
 
 ### 2.2 Functional Testing Procedures
@@ -18,21 +18,26 @@ This document outlines the testing strategy, acceptance criteria, and quality ju
 2. **Filtering & Sorting**:
    - Type "llama" into the search bar. Verify the table instantly filters.
    - Click the "Exclude Inactive/Error" checkbox. Verify broken rows disappear immediately.
+   - Click the `tool support` checkbox. Verify only rows with `Tool Support = true` remain visible.
    - Click the "Model ID" and "Context Limit" column headers. Verify the sorting toggles correctly between ascending and descending.
 3. **Live Ping Testing (Single Model)**:
    - Click the "Ping" button on any untested model.
    - Verify the button turns Blue ("Testing..."), then Green ("Re-test") if successful, or Red ("Re-test") on failure.
    - Verify that latency (e.g. `850ms (OK)`) is displayed.
    - Verify Context Limit and Max Output columns are populated with detected values (or "No Limit Reported").
+   - Verify the `Tool Support` column flips to `true` only when the model returns `tool_calls`; otherwise it remains `false`.
 4. **Batch Testing (Rate Limit Verification)**:
    - Click "Test Displayed Models".
    - Verify the progress bar appears.
-   - Verify tests fire exactly 3.5 seconds apart to respect the 40 requests/minute NVIDIA limit.
+   - Verify tests fire roughly 5 seconds apart to respect the 40 requests/minute NVIDIA limit.
    - Verify that models failing to yield numeric token limits turn Orange ("Retrying...") before falling back to Yellow ("No Limits") or Red ("Error").
    - Click "Stop Testing" mid-run and verify the batch process aborts immediately.
 5. **Caching Verification**:
    - Refresh the page (`Cmd + R`).
    - Verify that models tested previously still display their test results immediately without needing a re-ping.
+6. **Force Refresh Reset Verification**:
+   - Click "Force Refresh Data".
+   - Verify the table clears immediately, all saved test results are discarded, and the next dataset load shows models in their fresh untested state.
 
 ## 3. Acceptance Criteria
 
@@ -40,7 +45,8 @@ This document outlines the testing strategy, acceptance criteria, and quality ju
 |---------|---------------------|
 | Application Boot | Server starts successfully and opens browser exclusively via `./start.sh`. No `.env` files required. |
 | UI Rendering | Table is responsive. High priority columns are pinned to the left edge. UI is fully translated to English. |
-| Authentication | API key is securely read from `Sherman_NVDA_test`. Missing key continues gracefully, allowing open endpoints to still function. |
+| Authentication | API key is securely read from `NVIDIA_API_KEY`. Missing key continues gracefully, allowing open endpoints to still function. |
+| Tool Support Detection | Tested models populate `Tool Support` with `true` only when the API returns tool calls. |
 | Error Handling | Models timing out or returning 404s must degrade gracefully without crashing the server. UI must reflect "Error" or "Inactive", not lock up. |
 | Cross-Platform | Works interchangeably across macOS, Linux, and Windows. |
 

@@ -13,11 +13,10 @@ async function runTests() {
     console.log(`Found ${models.length} models to test.`);
 
     // Rate limit is 40 / min = 1 request every 1.5 seconds minimum.
-    // We do 2 requests per test (1 token, 99999999 tokens).
-    // So 1 test = 2 requests. 40 requests = 20 tests per minute.
-    // Delay per test = 60 / 20 = 3 seconds to be perfectly safe.
-    // Let's use 3100ms to be slightly under the limit.
-    const delayMs = 3500;
+    // We do up to 3 requests per test (latency, token limits, tool support).
+    // So 1 test = 3 requests. 40 requests = ~13 tests per minute.
+    // Delay per test = ~4.5 seconds to stay inside the limit.
+    const delayMs = 5000;
 
     const resultsFile = 'model_limits_cache.json';
     let cache = {};
@@ -27,7 +26,7 @@ async function runTests() {
 
     for (let i = 0; i < models.length; i++) {
         const m = models[i];
-        if (cache[m.modelId] && cache[m.modelId].contextLength !== "Unknown") {
+        if (cache[m.modelId] && cache[m.modelId].contextLength !== "Unknown" && cache[m.modelId].toolSupportChecked === true) {
             console.log(`[${i + 1}/${models.length}] Skipping ${m.modelId}, already cached.`);
             continue;
         }
@@ -38,7 +37,7 @@ async function runTests() {
             const tData = await tr.json();
             cache[m.modelId] = tData;
             fs.writeFileSync(resultsFile, JSON.stringify(cache, null, 2));
-            console.log(`  -> Context: ${tData.contextLength}, Max Out: ${tData.maxOutputTokens}`);
+            console.log(`  -> Context: ${tData.contextLength}, Max Out: ${tData.maxOutputTokens}, Tool Support: ${tData.toolSupport}`);
         } catch (e) {
             console.error(`  -> Failed: ${e.message}`);
         }
