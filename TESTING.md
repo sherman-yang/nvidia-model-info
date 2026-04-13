@@ -1,63 +1,90 @@
-# Testing Document
+# Testing
 
-## 1. Overview
-This document outlines the testing strategy, acceptance criteria, and quality judgment metrics for the `nvidia-model-info` project. The goal is to ensure the dashboard reliably fetches, filters, and interacts with the NVIDIA API under various conditions, including rate limits and malformed data.
+## Environment Setup
 
-## 2. How to Test
+1. Install Node.js 18 or later.
+2. Export a valid NVIDIA API key:
 
-### 2.1 Environment Setup
-1. Ensure Node.js v18+ is installed.
-2. Export a valid NVIDIA API key to your environment: `export NVIDIA_API_KEY="your_actual_key"`.
-3. Launch the application using `./start.sh`.
+```bash
+export NVIDIA_API_KEY="your_actual_key"
+```
 
-### 2.2 Functional Testing Procedures
-1. **Initial Load & Rendering**:
-   - Verify the browser opens automatically to `http://localhost:4920`.
-   - Verify the table renders with models.
-   - Verify models correctly marked as "deprecated" or "inactive" by the API are NOT displayed.
-2. **Filtering & Sorting**:
-   - Type "llama" into the search bar. Verify the table instantly filters.
-   - Click the "Exclude Inactive/Error" checkbox. Verify broken rows disappear immediately.
-   - Click the `tool support` checkbox. Verify only rows with `Tool Support = true` remain visible.
-   - Click the "Model ID" and "Context Limit" column headers. Verify the sorting toggles correctly between ascending and descending.
-3. **Live Ping Testing (Single Model)**:
-   - Click the "Ping" button on any untested model.
-   - Verify the button turns Blue ("Testing..."), then Green ("Re-test") if successful, or Red ("Re-test") on failure.
-   - Verify that latency (e.g. `850ms (OK)`) is displayed.
-   - Verify Context Limit and Max Output columns are populated with detected values (or "No Limit Reported").
-   - Verify the `Tool Support` column flips to `true` only when the model returns `tool_calls`; otherwise it remains `false`.
-4. **Batch Testing (Rate Limit Verification)**:
-   - Click "Test Displayed Models".
-   - Verify the progress bar appears.
-   - Verify tests fire roughly 5 seconds apart to respect the 40 requests/minute NVIDIA limit.
-   - Verify that models failing to yield numeric token limits turn Orange ("Retrying...") before falling back to Yellow ("No Limits") or Red ("Error").
-   - Click "Stop Testing" mid-run and verify the batch process aborts immediately.
-5. **Caching Verification**:
-   - Refresh the page (`Cmd + R`).
-   - Verify that models tested previously still display their test results immediately without needing a re-ping.
-6. **Force Refresh Reset Verification**:
-   - Click "Force Refresh Data".
-   - Verify the table clears immediately, all saved test results are discarded, and the next dataset load shows models in their fresh untested state.
+3. Start the app with:
 
-## 3. Acceptance Criteria
+```bash
+./start.sh
+```
 
-| Feature | Acceptance Criteria |
-|---------|---------------------|
-| Application Boot | Server starts successfully and opens browser exclusively via `./start.sh`. No `.env` files required. |
-| UI Rendering | Table is responsive. High priority columns are pinned to the left edge. UI is fully translated to English. |
-| Authentication | API key is securely read from `NVIDIA_API_KEY`. Missing key continues gracefully, allowing open endpoints to still function. |
-| Tool Support Detection | Tested models populate `Tool Support` with `true` only when the API returns tool calls. |
-| Error Handling | Models timing out or returning 404s must degrade gracefully without crashing the server. UI must reflect "Error" or "Inactive", not lock up. |
-| Cross-Platform | Works interchangeably across macOS, Linux, and Windows. |
+## Manual Test Checklist
 
-## 4. Judging Implementation Quality
+### Initial Load
 
-The quality of this project is judged based on the following dimensions:
+- Verify the dashboard loads on `http://localhost:4920` unless `PORT` is overridden.
+- Verify only active and usable models are shown.
+- Verify the table contains flattened metadata columns in addition to the pinned columns.
 
-1. **Performance**: Does the UI remain snappy when rendering 150+ flattened row configurations? Does the search box filter flawlessly without blocking the main browser thread?
-2. **Robustness**: How well does the backend handle strange API outputs? (e.g., nesting depth limits, random null values from the NVIDIA API). The flattening logic must not throw strict exceptions that crash the process.
-3. **UX (User Experience)**: Are the wait states clearly communicated? Features like the batch progress bar, the changing status colors (Blue -> Green/Yellow/Red), and the right-click copy-to-clipboard popup strongly influence UX quality.
-4. **Code Cleanliness**: 
-   - No dead code, unused CSS classes, or orphaned variables.
-   - Single responsibility principle applied where possible (e.g. abstract table render functions separated from API fetch logic).
-   - Strict adherence to the one-language rule (English only).
+### Sorting And Filtering
+
+- Enter `llama` in the search box and verify the table filters immediately.
+- Toggle `Exclude Inactive/Error` and verify rows with `Error` or `Inactive` live results disappear.
+- Toggle `Tool Support` and verify only rows with `Tool Support = true` remain visible.
+- Click `Model ID`, `Context Limit`, and `Tool Support` headers and verify sorting changes direction on repeated clicks.
+
+### Single-Row Testing
+
+- Click `Ping` on an untested row.
+- Verify the row clears immediately into a testing state.
+- Verify latency, context limit, max output, and tested timestamp are updated after the request.
+- Verify `Tool Support` is:
+  - blank before test completion
+  - `true` when tool calls are observed
+  - `false` when the tool probe completed without confirming support
+
+### Batch Testing
+
+- Click `Test Displayed Models`.
+- Verify rows that are missing a complete live result are tested sequentially.
+- Verify the progress area appears and the button changes to `Stop Testing`.
+- Verify the runner waits about 5 seconds between models.
+- Verify a row with missing numeric token limits gets retried once after another 5 second wait.
+- Click `Stop Testing` and verify the batch run stops.
+
+### Forced Batch Re-Test
+
+- Hold `Shift` and click `Test Displayed Models`.
+- Verify already-tested displayed rows are cleared and re-tested.
+
+### Force Refresh
+
+- Populate several rows with live test results.
+- Click `Force Refresh Data`.
+- Verify the table clears immediately.
+- Verify any running batch test is stopped.
+- Verify the next load returns fresh rows with no persisted live test values.
+
+### Usage Popover
+
+- Right-click a row.
+- Verify the popover opens with cURL, Python, and JavaScript snippets.
+- Verify the snippets reference `NVIDIA_API_KEY`.
+- Verify the copy buttons place the expected snippet text on the clipboard.
+
+## Static Verification
+
+Run these checks before committing:
+
+```bash
+npm run check
+bash -n start.sh
+```
+
+## Acceptance Criteria
+
+| Area | Expected Result |
+| --- | --- |
+| Startup | `./start.sh` requires `NVIDIA_API_KEY`, installs dependencies, and starts the server successfully. |
+| Data loading | Metadata is fetched, flattened, and displayed for active models only. |
+| Sorting and search | Every displayed column remains sortable and searchable through the global filter. |
+| Live probing | Single-row and batch testing update latency, token limits, and tool support without crashing the UI. |
+| Reset behavior | `Force Refresh Data` clears saved live test results and reloads the dataset from NVIDIA. |
+| Usage examples | Right-click snippets are model-specific and use `NVIDIA_API_KEY`. |

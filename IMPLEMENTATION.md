@@ -1,107 +1,155 @@
-# Implementation Document
+# Implementation
 
-## 1. Architecture Overview
-The application consists of a Node.js Express backend and a vanilla HTML/CSS/JavaScript frontend. It acts as an integration layer between the user's browser and the `build.nvidia.com` APIs.
+## Architecture
 
-## 2. Backend (`nvidia-model-server-info.js`)
+The project is a Node.js and Express server with a vanilla HTML, CSS, and JavaScript frontend.
 
-**Key Responsibilities:**
-- Serve static frontend files from the `public/` directory.
-- Provide a health endpoint (`/api/health`).
-- Provide the core models endpoint (`/api/models-with-metadata`).
-- Provide the live test endpoint (`/api/test-model`).
-- Persist test results to `model_limits_cache.json`.
+- Backend entrypoint: [nvidia-model-server-info.js](nvidia-model-server-info.js)
+- Frontend files: [public/index.html](public/index.html), [public/app.js](public/app.js), [public/styles.css](public/styles.css)
+- Startup wrapper: [start.sh](start.sh)
 
-**Core Logic Flow:**
-1. **API Key Loading**: 
-   - Reads the API key strictly from the system environment variable `NVIDIA_API_KEY`. 
-   - Falls back to a warning if it's not set. Requests are sent without the Authorization header in this case.
-   - `.env` files are ignored to enhance security.
+## Backend Responsibilities
 
-2. **Fetching Models**:
-   - `listAllModels()`: Calls `GET /models` to get the base list of models.
-   - `getModelMetadata(modelId)`: Concurrently fetches metadata for each model from `GET /models/{publisher}/{model}`.
+The backend:
 
-3. **Data Transformation & Filtering**: 
-   - `toRow(listModel, metadata)`: Flattens the metadata object to integrate it into a single table row dictionary alongside base item properties. 
-   - Extracts and pins `contextLength` and `maxOutputTokens` directly to the row using a series of key heuristics to handle inconsistencies in API payloads. If not found from the API metadata, the default value is `"Not Tested"`, which signals to the user that a live test hasn't been run yet.
-   - `isActiveUsableRow(row)`: Scans flattened keys and values to determine model availability. If terms like `deprecated`, `retired`, `inactive`, or purely boolean indicators suggest it's unavailable, the model is filtered out.
+- serves the static frontend
+- reads the API key from `process.env.NVIDIA_API_KEY`
+- fetches the NVIDIA model list
+- fetches metadata for each model
+- filters out rows that appear inactive, deprecated, retired, disabled, or otherwise unusable
+- merges persisted live test results back into the row set
+- exposes endpoints for loading models, testing one model, and clearing caches
 
-4. **Caching**:
-   - **In-memory cache**: Implements a TTL cache (`cache.payload`) valid for `CACHE_TTL_MS` (default 5 minutes). Prevents hitting the NVIDIA API rate limits repeatedly across browser reloads.
-   - **In-flight deduplication** (`cache.inFlight`): Deduplicates simultaneous requests making the initial API call.
-   - **Persistent test cache** (`model_limits_cache.json`): When models are tested via `/api/test-model`, results (latency, context length, max output tokens, tool support, availability) are saved to a JSON file. On the next data load, these cached results are merged into the rows unless the user explicitly presses `Force Refresh Data`, which clears the file and resets the in-memory cache first.
+## Data Loading Flow
 
-5. **Live Test Endpoint** (`/api/test-model`):
-   - Sends a minimal `max_tokens: 1` request to measure latency and availability.
-   - If the model is marked as unavailable (e.g. 401 or 404), the limit probing is immediately skipped, defaulting the limits to `"Inactive"` to prevent displaying false-positive limits.
-   - If available, sends an oversized `max_tokens: 99999999` request to trigger error messages that reveal the model's actual context length and max output token limits.
-   - Sends a forced `tools` request and marks `toolSupport=true` only when the model actually returns `tool_calls` in the response payload.
-   - Parses error messages with multiple regex patterns to extract limits from varied error formats across different model providers.
-   - Falls back: if `contextLength` is found but not `maxOutputTokens`, defaults to `min(4096, contextLength)`. The reverse also applies.
-   - Persists the result to `model_limits_cache.json` and invalidates the in-memory cache.
+1. `GET /api/models-with-metadata` calls NVIDIA `GET /v1/models`.
+2. For each model, the server calls the per-model metadata endpoint.
+3. Metadata is flattened into a single row object.
+4. Active and usable rows are kept.
+5. Cached live test results from `model_limits_cache.json` are merged into the matching rows.
+6. The final response returns:
+   - `columns`
+   - `rows`
+   - `fetchedAt`
+   - `modelCount`
+   - `totalModelCount`
+   - `filteredOutCount`
+   - `apiKeyConfigured`
 
-6. **Browser Launch**:
-   - On server start, automatically opens the dashboard URL in the user's default browser via `exec("open ...")` on macOS, `exec("start ...")` on Windows, or `exec("xdg-open ...")` on Linux.
+## Flattened Row Model
 
-## 3. Frontend (`public/app.js`, `public/index.html`, `public/styles.css`)
+Each row begins with stable fields such as:
 
-**Key Responsibilities:**
-- Request aggregated data from the backend.
-- Render the responsive, tabular UI.
-- Handle search filtering, column sorting, live testing, and code snippet generation.
+- `liveTest`
+- `modelId`
+- `publisher`
+- `contextLength`
+- `maxOutputTokens`
+- `latencyMs`
+- `toolSupport`
+- `testedAt`
 
-**Core Logic Flow:**
-1. **State Management**:
-   - Maintains a central `state` object holding rows, columns, search text, and sort key/direction.
-   
-2. **Table Rendering**:
-   - Pinned columns: `liveTest` (Live Ping), `modelId`, `publisher`, `contextLength`, `maxOutputTokens`, `latencyMs`, `toolSupport`, `testedAt`. These are sticky on the left for easy reference.
-   - When a model has cached test results, the Live Ping column shows the result (e.g. `"850ms (OK)"`) alongside a small "Re-test" button. Untested models show a "Ping" button.
-   - Applies dynamic CSS classes (`status-testing`, `status-success`, `status-error`, etc.) to the `liveTest` cell based on the internal `testState` to alter button backgrounds and text colors for high-contrast visual feedback.
+All remaining metadata keys are flattened and appended as sortable columns.
 
-3. **Sorting and Filtering**:
-   - A real-time search box applies a substring match against all column values.
-   - An "Exclude Inactive/Error" checkbox filters out rows with `liveTest` or token limits marked as "Error" or "Inactive".
-   - A `tool support` checkbox filters the table down to models with `toolSupport === true`.
-   - Clicking headers toggles ascending/descending sorting, implemented by standardizing numbers vs text mapping (`compareValues`).
+`toolSupportChecked` is stored internally and persisted in cache, but hidden from the table.
 
-4. **Live Testing**:
-   - `runLiveTest(row, btn)`: Tests a single model via `/api/test-model` and updates the row in-place. Single tests do not automatically retry on failure.
-   - `runBatchTest(force)`: Iterates over all visible rows sequentially, calling `runLiveTest` with a 5 second delay between tests to respect rate limits. To aggressively protect against false negatives (like temporary 429 Rate Limits masquerading as missing limits), **any test that fails to detect a strictly numeric token limit** (including `Error`, `Inactive`, and `No Limit Reported`) will automatically wait 5 seconds and retry exactly once. Provides a progress bar and abort capability.
+## Live Test Flow
 
-5. **Usage Code Generation (`buildUsageSnippets`)**:
-   - When the user right-clicks a row, a popup context window (`#usage-popover`) is shown.
-   - Constructs runnable examples containing the target model ID and realistic values using `maxOutputTokens`.
-   - Offers snippets for cURL, Python (`requests`), and JavaScript (`fetch`).
-   - Uses the environment variable `NVIDIA_API_KEY` in all snippets (no hardcoded keys).
+`GET /api/test-model?model=...` performs up to three probes:
 
-6. **Theming**:
-   - CSS uses semantic variables (`:root` for light, `@media (prefers-color-scheme: dark)` for dark).
-   - Automatically follows the user's system preference.
+1. Availability and latency probe
+   - sends a minimal chat completion request
+   - `200` means available
+   - latency is measured client-side around that request
 
-## 4. Initialization
-- **`start.sh`**: Acts as the single entrypoint for the project. The script verifies that Node.js and NPM exist, asserts that the `NVIDIA_API_KEY` environment variable has been exported successfully, installs dependencies via `npm install`, and delegates execution directly to the `nvidia-model-server-info.js` backend, ensuring a smooth and consistent launch pattern.
+2. Token limit probe
+   - sends an oversized `max_tokens` request
+   - parses NVIDIA response text for context limit and output limit values
+   - if the model accepts the oversized value, the row falls back to `No Limit Reported`
 
-## 5. Dependencies
-- **Node.js**: Requires `v18+` (uses globally available `fetch`).
-- **Express (`^4.21.2`)**: For the HTTP web server and robust static file routing.
+3. Tool support probe
+   - sends a chat completion request with `tools` and `tool_choice`
+   - marks `toolSupport=true` only when the response actually includes tool calls
+   - leaves `toolSupportChecked=false` if the probe fails before a definite result
 
-*(Note: Environment configurations like `dotenv` have been explicitly removed according to requirements. The application mandates system environment variable usage exclusively.)*
+The final result is written to `model_limits_cache.json` and the in-memory payload cache is invalidated.
 
-## 6. Prerequisites and Limitations
+## Cache Behavior
 
-### Prerequisites
-- **API Key**: Requires a valid NVIDIA API Key (`build.nvidia.com`) exported in the environment (`NVIDIA_API_KEY`).
-- **Network Access**: The host machine must have outbound network access to `integrate.api.nvidia.com` for fetching lists and pinging models.
-- **Node.js Environment**: The backend specifically targets Node.js v18+ because it inherently relies on the globally available `fetch()` API introduced natively in that version.
+There are two cache layers:
 
-### Limitations
-- **Rate Limiting**: The NVIDIA free API enforces a strict limit (often ~40 requests per minute). Because each live test now performs up to three API calls (latency, token limits, tool support), the batch testing loop employs a 5 second delay to mitigate `429 Too Many Requests` responses, though very large batches might still trigger them when background network latency fluctuates.
-- **Heuristic-based Scraping**: Token limits (Context Length and Max Output) are not explicitly provided in a standard structured way from the models endpoint. The application relies entirely on triggering and parsing `400 Bad Request` or `422 Unprocessable Entity` error message bodies to discover these limits. Any unannounced change by NVIDIA to their error schema format could temporarily break this limit-detection logic.
-- **Absence of Official Tokens**: Some models dynamically scale their limits or simply ignore the `max_tokens` field. In these instances, the logic will safely fall back to "No Limit Reported", meaning we cannot conclusively determine a hard ceiling through probing alone.
+- In-memory payload cache
+  - stores the assembled model table for `CACHE_TTL_MS`
+  - default TTL is 5 minutes
+  - prevents repeated metadata reloads during normal browsing
 
-## 7. Future Development Directions and Improvements
-- **WebSockets / Server-Sent Events (SSE)**: Transition the Live Ping feature from heavy HTTP polling loops to an SSE stream so the frontend can receive real-time, event-driven updates during massive bulk tests.
-- **Advanced Exporting**: Implement a feature to export the flattened, tested `model_limits_cache.json` results directly to a CSV or Excel file for data scientists to analyze offline.
-- **Dynamic Pinned Columns**: Allow users to drag-and-drop or configure which metadata columns they want pinned to the left edge, saving these preferences to LocalStorage.
+- Persistent live test cache
+  - file: `model_limits_cache.json`
+  - stores per-model live probe results across page reloads and server restarts
+
+`Force Refresh Data` clears both layers.
+
+## Frontend Responsibilities
+
+The frontend:
+
+- loads `/api/models-with-metadata`
+- renders a wide sortable table
+- applies search and checkbox filters
+- runs single-row and batch live tests
+- shows right-click usage snippets
+- tracks UI-only state such as sort order, filter text, and batch progress
+
+## Frontend Behavior
+
+### Filtering
+
+- Search applies a substring match across all displayed row values.
+- `Exclude Inactive/Error` hides rows whose live result is `Error` or `Inactive`.
+- `Tool Support` hides every row except those with `toolSupport === true`.
+
+### Batch Testing
+
+- Default batch mode tests displayed rows that are still missing a complete live result.
+- A row is considered complete only when it has:
+  - a measured latency string
+  - numeric `contextLength`
+  - numeric `maxOutputTokens`
+  - `toolSupportChecked === true`
+- `Shift + Click` forces re-testing of every displayed row.
+- The batch runner waits 5 seconds between models.
+- If a row still lacks numeric token limits after a run, it retries once after another 5 seconds.
+
+### Tool Support Display
+
+`Tool Support` is intentionally three-state in the UI:
+
+- blank: not tested
+- `true`: supported
+- `false`: tested but not confirmed
+
+## Startup Flow
+
+[start.sh](start.sh) is the intended entrypoint.
+
+It:
+
+- checks that `node` and `npm` exist
+- requires `NVIDIA_API_KEY`
+- runs `npm install`
+- refuses to kill unknown processes on the target port
+- starts the server with `npm start`
+
+When the server starts, it tries to open the dashboard URL in the default browser through the host OS.
+
+## Runtime Configuration
+
+Supported environment variables:
+
+- `NVIDIA_API_KEY`
+- `PORT`
+- `MAX_CONCURRENCY`
+- `REQUEST_TIMEOUT_MS`
+- `CACHE_TTL_MS`
+
+`.env` loading is intentionally not used.
