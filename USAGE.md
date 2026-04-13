@@ -1,83 +1,113 @@
-# Usage Document
+# Usage
 
-This guide explains how to install and run the `nvidia-model-info` dashboard on your local machine.
+## Prerequisites
 
-## 1. Prerequisites
-- **Node.js**: Ensure Node.js version 18 or higher is installed.
-- **NVIDIA API Key**: You must obtain an API key from `build.nvidia.com`.
+- Node.js 18 or later
+- An NVIDIA API key from `build.nvidia.com`
 
-## 2. Installation
-Clone the repository, navigate into the project directory, and install the required dependencies using `npm`.
+## Start The Dashboard
 
-```bash
-git clone <repository_url>
-cd nvidia-model-info
-npm install
-```
+Export the key in your shell. Do not place it in `.env`.
 
-## 3. Configuration
-The application reads your API key securely from your system environment variables. You must set the `NVIDIA_API_KEY` variable. DO NOT create `.env` files for this key.
+macOS or Linux:
 
-**On macOS/Linux**:
 ```bash
 export NVIDIA_API_KEY="your_actual_nvidia_api_key_here"
 ```
 
-**On Windows (Command Prompt)**:
+Windows Command Prompt:
+
 ```cmd
 set NVIDIA_API_KEY=your_actual_nvidia_api_key_here
 ```
 
-**On Windows (PowerShell)**:
+Windows PowerShell:
+
 ```powershell
 $env:NVIDIA_API_KEY="your_actual_nvidia_api_key_here"
 ```
 
-## 4. Running the Application
-Start the Node.js server using the provided start script. This helper script checks your Node.js version, ensures the environment variable is present, installs dependencies automatically, and starts the server.
+Then start the app:
 
 ```bash
 ./start.sh
 ```
 
-The browser will open automatically to `http://localhost:4920`.
+The default URL is `http://localhost:4920`.
 
-## 5. Using the Application
+## Using The Interface
 
-- **Browsing**: Scroll left or right to view all the flattened metadata fields dynamically.
-- **Essential Information**: Key fields like `Context Limit`, `Max Output`, `Latency (ms)`, and `Tool Support` are pinned to the left of the table.
-- **Sorting**: Click on any column header to toggle ascending/descending sorting for that column.
-- **Searching**: Use the "Search" input near the top to filter the table globally by model Name, Publisher, or any available text.
-- **Filter Inactive/Error**: Check the "Exclude Inactive/Error" box next to the search bar to instantly hide models that failed their test or are offline.
-- **Tool Support Filter**: Check the `tool support` box near the refresh button to show only models that have been verified to support tool calling.
-- **Live Ping**: Click the `Ping` button on any row. This instantly sends a tiny Chat request to measure Response Latency (ms), a purposely oversized `max_tokens` request to detect the model's exact *Context Length* and *Max Output Tokens* from NVIDIA's error responses, and a forced `tools` request to detect *Tool Support*. Results are cached permanently. 
-  - The Ping button provides colored visual feedback: 🔵 **Blue** (Testing), 🟠 **Orange** (Retrying), 🟢 **Green** (Success), 🟡 **Yellow** (No Limits Reported), and 🔴 **Red** (Error/Offline).
-- **Batch Testing**: Click "Test Displayed Models" to sequentially test all currently visible models with a 5 second delay to avoid rate limits. Models that were previously tested but never got a `tool support` result are automatically retested. If a test still fails to detect numeric limits, the frontend automatically retries once (with a 5 second delay) before moving to the next model. Hold **Shift+Click** to force re-test all models (even those already tested). A progress bar shows the current status, and you can click "Stop Testing" to cancel.
-- **Viewing Code Snippets**: Right-click on any model's row to view a popup window containing cURL, Python, and JavaScript usage examples for that exact model. Click the "Copy" buttons to copy the snippets securely. All snippets use the `NVIDIA_API_KEY` environment variable for authentication.
-- **Refreshing**: Click the "Force Refresh Data" button to reset the current dashboard state, clear all saved test results from `model_limits_cache.json`, ignore in-memory cache, and fetch a fresh model list and metadata snapshot from the NVIDIA API.
-- **Theme**: The application automatically follows your system's light/dark mode preference.
+- Browse: Scroll horizontally to inspect all flattened metadata columns.
+- Sort: Click any column header to toggle ascending or descending order.
+- Search: Use the search box to filter rows by substring across all displayed values.
+- Exclude Inactive/Error: Hides rows whose live test resolved to `Error` or `Inactive`.
+- Tool Support: Shows only rows whose tool calling probe completed and returned `true`.
 
----
+## Live Testing
 
-## 6. Bulk Testing (Optional)
-If you do not want to click `Live Ping` for every model individually, you can automatically test all 180+ models in the background.
+### Ping One Model
 
-To prevent hitting NVIDIA's strict rate limits (e.g. 40 requests per minute), we have included a safe background script. While the main server is running, open a **new** terminal window and run:
+Click `Ping` on a row to re-test that model.
 
-```bash
-node bulk_test.js
-```
+The backend probes:
 
-This crawler deliberately pauses for roughly 5 seconds between each model. It will take longer than before to run through the entire catalog because each test now also probes tool calling support.
-Results are automatically saved to `model_limits_cache.json`.
-The dashboard will instantly detect this file and populate the `Context Limit`, `Max Output`, and `Tool Support` columns for you automatically on your next page refresh!
+1. Availability and latency
+2. Context limit and max output limit
+3. Tool calling support
 
-## 7. Troubleshooting
+The row is cleared to an in-progress state before the request completes.
 
-- **"Not Tested" values**: If you see "Not Tested" in the Context Limit or Max Output columns, it means the model hasn't been tested yet. Click "Ping" on that row or run a batch test.
-- **"Unknown" values**: The model responded successfully but didn't reveal its limits through error messages. This is normal for some models.
-- **"No Limit Reported" values**: The model accepted an extremely large `max_tokens` value (99999999) without error, meaning it doesn't enforce or report token limits externally.
-- **"Inactive" values**: The model returned a 404 error, meaning it's currently unavailable on NVIDIA's servers.
-- **Rate limit errors**: If you see test failures during batch testing, the rate limit (40 req/min) may have been exceeded. Wait a minute and try again.
-- **API Key not configured**: Ensure `NVIDIA_API_KEY` is exported in your shell. Run `echo $NVIDIA_API_KEY` to verify.
-- **Port conflict**: If port 4920 is in use, set a custom port: `PORT=5000 ./start.sh`.
+### Test Displayed Models
+
+Click `Test Displayed Models` to batch-test the rows that are currently displayed and still missing a complete live result.
+
+- Rows that already have latency, numeric token limits, and a completed tool support probe are skipped by default.
+- Hold `Shift` while clicking to force a re-test of every displayed row.
+- The batch runner waits 5 seconds between models.
+- If a test does not return numeric token limits, the frontend waits 5 seconds and retries that model once.
+- Click the button again while a batch is running to stop it.
+
+## Understanding The Key Columns
+
+- `Context Limit`: Comes from metadata when available, otherwise from live probing. If still unknown, it shows `Unknown`, `Inactive`, `Error`, or `No Limit Reported`.
+- `Max Output`: Same detection flow as `Context Limit`.
+- `Latency (ms)`: Populated only after a successful live probe.
+- `Tool Support`:
+  - blank = not tested yet
+  - `true` = tool calling support confirmed
+  - `false` = tool support probe completed but did not confirm tool calling
+- `Tested At`: Local timestamp saved with the last completed live probe.
+
+## Row Usage Popover
+
+Right-click any model row to open a usage popover with copyable examples for:
+
+- cURL
+- Python `requests`
+- JavaScript `fetch`
+
+The snippets always reference `NVIDIA_API_KEY` and are generated for that specific model ID.
+
+## Force Refresh Data
+
+`Force Refresh Data` is a hard reset for the running dashboard state.
+
+It does all of the following before reloading:
+
+- clears the visible table
+- stops any running batch test
+- deletes all saved live test results from `model_limits_cache.json`
+- clears the backend in-memory cache
+- fetches a fresh model list and model metadata from NVIDIA
+
+Use this when you want to discard all current test results and start from a clean state.
+
+## Troubleshooting
+
+- API key missing: verify `NVIDIA_API_KEY` is exported in the same shell that launches `./start.sh`.
+- Port already in use: set another port, for example `PORT=5000 ./start.sh`.
+- `Not Tested` or blank `Tool Support`: the row has not completed a live test yet.
+- `Unknown`: the model responded, but the token limit probe did not produce a numeric limit.
+- `No Limit Reported`: the model accepted the oversized token test without exposing a hard limit.
+- `Inactive`: the availability test failed for that model.
+- `Error`: the probe failed before a usable result could be determined.
