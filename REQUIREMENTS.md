@@ -10,6 +10,7 @@ The purpose of this project is to display information about the free AI models p
    * **Only** display models that are active and usable. Any models marked as deprecated, retired, inactive, etc., must be hidden from the user interface.
    * Provide a real-time text filter allowing the user to search by model name, publisher, or any other metadata field.
    * Provide an "Exclude Inactive/Error" toggle to instantly hide models that failed their live ping tests or do not report limits.
+   * Provide a `tool support` toggle that shows only models verified to support tool calling.
 
 2. **Metadata Display**
    * For each active model, fetch its complete metadata via the specific model metadata endpoint.
@@ -20,19 +21,20 @@ The purpose of this project is to display information about the free AI models p
 
 3. **Live Ping & Limits Detection**
    * Each model row includes a "Ping" button to send a test request measuring latency and detecting actual context/output token limits via error response parsing.
+   * The same test flow must detect and display whether the model supports tool calling.
    * Provide clear, colored visual feedback during the testing process (e.g., Blue for Testing, Orange for Retrying, Green for Success, Red for Error).
-   * Test results are persisted to `model_limits_cache.json` and survive page refreshes and server restarts.
+   * Test results are persisted to `model_limits_cache.json` and survive page refreshes and server restarts unless the user explicitly triggers `Force Refresh`.
    * Support batch testing of all displayed models with rate-limit protection and automatic retries for failed tokens.
 
 4. **Usage Examples**
    * Allow users to right-click a row to see usage examples for that specific model.
    * Provide code snippets in cURL, Python, and JavaScript.
-   * Code snippets must include the correct context length limits and the user's API key reference via environment variable `Sherman_NVDA_test`.
+   * Code snippets must include the correct context length limits and the user's API key reference via environment variable `NVIDIA_API_KEY`.
    * Provide a one-click "Copy" button for each code snippet.
 
 5. **Manual Refresh**
-   * Provide a manual "Force Refresh" button to fetch the latest model lists and metadata statuses on demand.
-   * The backend caches API results in memory for 5 minutes to prevent excessive API calls.
+   * Provide a manual "Force Refresh" button that clears all saved test records and cache state before fetching the latest model lists and metadata statuses on demand.
+   * The backend caches API results in memory for 5 minutes during normal operation, but `Force Refresh` must bypass and reset that cache.
 
 ## 3. Technical & Environmental Requirements
 
@@ -40,7 +42,7 @@ The purpose of this project is to display information about the free AI models p
    * All UI text, logs, and information must be presented in **English**.
 
 2. **Authentication / API Key Handling**
-   * The application must read the NVIDIA API key exclusively from the environment variable named `Sherman_NVDA_test`.
+   * The application must read the NVIDIA API key exclusively from the environment variable named `NVIDIA_API_KEY`.
    * **Security Constraint**: `.env` files are strictly prohibited for storing or loading the API key. The application must rely purely on system UI or shell environments.
 
 3. **Runtime Environment**
