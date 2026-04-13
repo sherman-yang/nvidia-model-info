@@ -15,10 +15,10 @@ if ! command -v npm >/dev/null 2>&1; then
   exit 1
 fi
 
-if [[ -z "${Sherman_NVDA_test:-}" ]]; then
-  echo "Error: environment variable Sherman_NVDA_test is not set."
+if [[ -z "${NVIDIA_API_KEY:-}" ]]; then
+  echo "Error: environment variable NVIDIA_API_KEY is not set."
   echo "Please set it in your shell before running:"
-  echo '  export Sherman_NVDA_test="your_nvidia_api_key"'
+  echo '  export NVIDIA_API_KEY="your_nvidia_api_key"'
   exit 1
 fi
 
