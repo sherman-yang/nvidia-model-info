@@ -1,55 +1,77 @@
-# Requirements Document
+# Requirements
 
-## 1. Project Overview
-The purpose of this project is to display information about the free AI models provided on `build.nvidia.com`. The application serves as a lightweight, interactive dashboard to browse models, inspect their capabilities (especially token limits), and view code snippets on how to use them with the NVIDIA API.
+## Product Goal
 
-## 2. Core Functional Requirements
+Provide a local dashboard for inspecting the free model catalog on `build.nvidia.com`, including flattened metadata, live capability probes, sorting, searching, and copyable usage examples.
 
-1. **Model Listing & Filtering**
-   * Fetch all models from the NVIDIA API.
-   * **Only** display models that are active and usable. Any models marked as deprecated, retired, inactive, etc., must be hidden from the user interface.
-   * Provide a real-time text filter allowing the user to search by model name, publisher, or any other metadata field.
-   * Provide an "Exclude Inactive/Error" toggle to instantly hide models that failed their live ping tests or do not report limits.
-   * Provide a `tool support` toggle that shows only models verified to support tool calling.
+## Functional Requirements
 
-2. **Metadata Display**
-   * For each active model, fetch its complete metadata via the specific model metadata endpoint.
-   * Present the metadata in a flattened, tabular format.
-   * **Critical Fields**: Extract and prominently display `Context Length` and `Max Output Tokens`. If the API does not provide these natively, default to `"Not Tested"` and allow users to detect them via the Live Ping feature.
-   * Include all other metadata information available in the API response.
-   * Support sorting (ascending/descending) on all columns in the table.
+### Model Loading
 
-3. **Live Ping & Limits Detection**
-   * Each model row includes a "Ping" button to send a test request measuring latency and detecting actual context/output token limits via error response parsing.
-   * The same test flow must detect and display whether the model supports tool calling.
-   * Provide clear, colored visual feedback during the testing process (e.g., Blue for Testing, Orange for Retrying, Green for Success, Red for Error).
-   * Test results are persisted to `model_limits_cache.json` and survive page refreshes and server restarts unless the user explicitly triggers `Force Refresh`.
-   * Support batch testing of all displayed models with rate-limit protection and automatic retries for failed tokens.
+- Fetch the NVIDIA model catalog from the API.
+- Fetch metadata for every listed model through the model metadata endpoint.
+- Show only models that appear active and usable.
+- Flatten metadata into table columns so every available metadata field can be viewed and sorted.
 
-4. **Usage Examples**
-   * Allow users to right-click a row to see usage examples for that specific model.
-   * Provide code snippets in cURL, Python, and JavaScript.
-   * Code snippets must include the correct context length limits and the user's API key reference via environment variable `NVIDIA_API_KEY`.
-   * Provide a one-click "Copy" button for each code snippet.
+### Table Behavior
 
-5. **Manual Refresh**
-   * Provide a manual "Force Refresh" button that clears all saved test records and cache state before fetching the latest model lists and metadata statuses on demand.
-   * The backend caches API results in memory for 5 minutes during normal operation, but `Force Refresh` must bypass and reset that cache.
+- Support sorting on every displayed column.
+- Support global text search across row values.
+- Keep these columns pinned on the left:
+  - `Live Ping`
+  - `Model ID`
+  - `Publisher`
+  - `Context Limit`
+  - `Max Output`
+  - `Latency (ms)`
+  - `Tool Support`
+  - `Tested At`
 
-## 3. Technical & Environmental Requirements
+### Live Probing
 
-1. **Language & Localization**
-   * All UI text, logs, and information must be presented in **English**.
+- Each row must provide a `Ping` action.
+- A live probe must attempt to determine:
+  - availability
+  - latency
+  - context length
+  - max output tokens
+  - tool calling support
+- `Tool Support` must remain blank until a tool support probe finishes.
+- Batch testing must support:
+  - testing currently displayed rows
+  - skipping already complete rows by default
+  - forcing a full re-test with `Shift + Click`
+  - a 5 second delay between models
+  - a single retry when numeric token limits are still missing
 
-2. **Authentication / API Key Handling**
-   * The application must read the NVIDIA API key exclusively from the environment variable named `NVIDIA_API_KEY`.
-   * **Security Constraint**: `.env` files are strictly prohibited for storing or loading the API key. The application must rely purely on system UI or shell environments.
+### Filters
 
-3. **Runtime Environment**
-   * Node.js version 18 or above (relies on the native global `fetch` API).
+- Provide an `Exclude Inactive/Error` filter.
+- Provide a `Tool Support` filter that keeps only rows with confirmed tool calling support.
 
-4. **Browser Launch**
-   * The application should automatically open the user's default browser to the dashboard URL on server startup.
+### Usage Examples
 
-5. **Theming**
-   * The application follows the user's system light/dark mode preference automatically.
+- Right-clicking a row must open model-specific usage examples.
+- Provide copyable snippets for:
+  - cURL
+  - Python
+  - JavaScript
+- Snippets must reference `NVIDIA_API_KEY`.
+
+### Reset And Refresh
+
+- `Force Refresh Data` must:
+  - stop any running batch test
+  - clear visible dashboard state
+  - delete saved live test results
+  - reset backend caches
+  - fetch a fresh model list and metadata snapshot from NVIDIA
+
+## Technical Requirements
+
+- Runtime language: Node.js 18+
+- UI language: English
+- API key source: environment variable `NVIDIA_API_KEY`
+- `.env` files must not be used for API key loading
+- The app should attempt to open the dashboard automatically in the default browser on startup
+- The UI should follow the system light or dark theme

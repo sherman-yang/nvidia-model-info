@@ -451,8 +451,6 @@ async function runBatchTest(force = false) {
     const gotNumericOut = typeof row.maxOutputTokens === "number";
     const needsRetry = !gotNumericCtx && !gotNumericOut;
 
-    console.log(`[batch] ${row.modelId}: ctx=${row.contextLength} (${typeof row.contextLength}), out=${row.maxOutputTokens} (${typeof row.maxOutputTokens}), needsRetry=${needsRetry}`);
-
     if (needsRetry && !signal.aborted) {
       // Update batchStatus text — this element is NEVER destroyed by render()
       batchStatus.textContent = `⟳ Retrying ${count}/${visibleRows.length}: ${row.modelId}... (waiting 5s)`;
@@ -464,8 +462,6 @@ async function runBatchTest(force = false) {
         freshBtn.classList.add("retry");
         freshBtn.disabled = false;
       }
-
-      console.log(`[batch] ${row.modelId}: retrying in 5s, freshBtn found: ${!!freshBtn}`);
 
       // Wait before retry
       try {
@@ -483,9 +479,7 @@ async function runBatchTest(force = false) {
       if (!signal.aborted) {
         // Re-query again since we just waited
         const retryBtn = document.querySelector(`tr[data-model-id="${row.modelId}"] .live-test-btn`);
-        console.log(`[batch] ${row.modelId}: executing retry now`);
         await runLiveTest(row, retryBtn, true);
-        console.log(`[batch] ${row.modelId}: retry done - ctx=${row.contextLength}, out=${row.maxOutputTokens}`);
       }
     }
 
