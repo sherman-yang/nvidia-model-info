@@ -12,6 +12,15 @@ const API_BASE_URL = "https://integrate.api.nvidia.com/v1";
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 20000);
 const MAX_CONCURRENCY = Math.max(1, Number(process.env.MAX_CONCURRENCY || 12));
 const CACHE_TTL_MS = Math.max(1000, Number(process.env.CACHE_TTL_MS || 5 * 60 * 1000));
+const PROBE_RATE_LIMIT_RPM = Math.max(1, Number(process.env.PROBE_RATE_LIMIT_RPM || 36));
+const PROBE_MIN_INTERVAL_MS = Math.max(
+  250,
+  Number(process.env.PROBE_MIN_INTERVAL_MS || Math.ceil(60000 / PROBE_RATE_LIMIT_RPM))
+);
+const PROBE_TIMEOUT_MS = Math.max(1000, Number(process.env.PROBE_TIMEOUT_MS || 15000));
+const TOOL_SUPPORT_TIMEOUT_MS = Math.max(1000, Number(process.env.TOOL_SUPPORT_TIMEOUT_MS || 25000));
+const PROBE_MAX_429_RETRIES = Math.max(0, Number(process.env.PROBE_MAX_429_RETRIES || 2));
+const PROBE_429_BACKOFF_MS = Math.max(1000, Number(process.env.PROBE_429_BACKOFF_MS || 10000));
 
 if (typeof fetch !== "function") {
   throw new Error("This app requires Node.js 18+ (global fetch is missing).");
@@ -24,39 +33,26 @@ const cache = {
   loadToken: 0
 };
 
-const TOOL_SUPPORT_REQUEST_BODY = {
-  messages: [
-    {
-      role: "user",
-      content: "Call the tool exactly once with location set to Calgary. Do not answer normally."
-    }
-  ],
-  tools: [
-    {
-      type: "function",
-      function: {
-        name: "get_weather",
-        description: "Get weather for a location.",
-        parameters: {
-          type: "object",
-          properties: {
-            location: {
-              type: "string"
-            }
-          },
-          required: ["location"]
-        }
+let probeRateLimitChain = Promise.resolve();
+let nextProbeSlotAt = 0;
+
+const TOOL_SUPPORT_PROMPT = "Call the tool exactly once with location set to Calgary. Do not answer normally.";
+const TOOL_SUPPORT_FUNCTION_SCHEMA = {
+  name: "get_weather",
+  description: "Get weather for a location.",
+  parameters: {
+    type: "object",
+    properties: {
+      location: {
+        type: "string"
       }
-    }
-  ],
-  tool_choice: {
-    type: "function",
-    function: {
-      name: "get_weather"
-    }
-  },
-  temperature: 0,
-  max_tokens: 64
+    },
+    required: ["location"]
+  }
+};
+const TOOL_SUPPORT_TOOL_SCHEMA = {
+  type: "function",
+  function: TOOL_SUPPORT_FUNCTION_SCHEMA
 };
 
 function getApiKey() {
@@ -128,6 +124,91 @@ function parseResponseBodyText(bodyText) {
     return JSON.parse(bodyText);
   } catch {
     return bodyText;
+  }
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function reserveProbeSlot() {
+  const reservation = probeRateLimitChain.then(async () => {
+    const waitMs = Math.max(0, nextProbeSlotAt - Date.now());
+    if (waitMs > 0) {
+      await sleep(waitMs);
+    }
+    nextProbeSlotAt = Date.now() + PROBE_MIN_INTERVAL_MS;
+  });
+
+  probeRateLimitChain = reservation.catch(() => {});
+  return reservation;
+}
+
+function extendProbeBackoffWindow(waitMs) {
+  nextProbeSlotAt = Math.max(nextProbeSlotAt, Date.now() + waitMs);
+}
+
+function getRetryDelayMs(response, attempt) {
+  const retryAfter = response.headers.get("retry-after");
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds) && seconds > 0) {
+      return Math.ceil(seconds * 1000);
+    }
+
+    const absolute = Date.parse(retryAfter);
+    if (Number.isFinite(absolute)) {
+      const delta = absolute - Date.now();
+      if (delta > 0) {
+        return delta;
+      }
+    }
+  }
+
+  return PROBE_429_BACKOFF_MS * Math.pow(2, attempt);
+}
+
+async function postProbeRequest(url, headers, payload, { modelId, purpose, timeoutMs }) {
+  let attempt = 0;
+
+  while (true) {
+    await reserveProbeSlot();
+    const timeoutWrap = withTimeout(null, timeoutMs);
+
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+        signal: timeoutWrap.signal
+      });
+
+      const bodyText = await response.text();
+      const body = parseResponseBodyText(bodyText);
+
+      if (response.status === 429 && attempt < PROBE_MAX_429_RETRIES) {
+        const waitMs = getRetryDelayMs(response, attempt);
+        extendProbeBackoffWindow(waitMs);
+        console.warn(
+          `${purpose} probe hit 429 for ${modelId}; waiting ${waitMs}ms before retry ${attempt + 1}/${PROBE_MAX_429_RETRIES}`
+        );
+        attempt += 1;
+        await sleep(waitMs);
+        continue;
+      }
+
+      return {
+        response,
+        bodyText,
+        body,
+        rateLimited: response.status === 429,
+        attempts: attempt + 1
+      };
+    } finally {
+      timeoutWrap.clear();
+    }
   }
 }
 
@@ -553,7 +634,9 @@ async function loadModelsWithMetadata({ forceRefresh = false } = {}) {
           row.toolSupportChecked = Boolean(tc.toolSupportChecked);
           row.testedAt = tc.testedAt || "";
           
-          if (tc.contextLength === "Error") {
+          if (tc.rateLimited || tc.contextLength === "Rate Limited" || tc.maxOutputTokens === "Rate Limited") {
+            row.liveTest = tc.isAvailable && tc.latencyMs >= 0 ? `${tc.latencyMs}ms (OK)` : "Rate Limited";
+          } else if (tc.contextLength === "Error") {
             row.liveTest = "Error";
           } else if (tc.isAvailable) {
             row.liveTest = `${tc.latencyMs}ms (OK)`;
@@ -634,6 +717,168 @@ function hasToolCallInResponse(body) {
   return toolCalls.length > 0 || Boolean(message?.function_call);
 }
 
+function getErrorText(body, bodyText) {
+  if (typeof body === "string") {
+    return body;
+  }
+
+  if (bodyText) {
+    return bodyText;
+  }
+
+  return JSON.stringify(body ?? {});
+}
+
+function isToolSupportExplicitlyUnsupported(status, errorText) {
+  if (status < 400 || status >= 500) {
+    return false;
+  }
+
+  const normalized = String(errorText || "").toLowerCase();
+  return (
+    /tool(s)? (is|are)? not (enabled|supported|available)/i.test(normalized) ||
+    /tool[_ ]?calls? (is|are)? not (enabled|supported|available)/i.test(normalized) ||
+    /does not support tool/i.test(normalized) ||
+    /does not support function/i.test(normalized) ||
+    /function calling (is|not)? ?supported/i.test(normalized) ||
+    /tool_choice.*not supported/i.test(normalized) ||
+    /unsupported.*tool/i.test(normalized) ||
+    /unsupported.*function/i.test(normalized)
+  );
+}
+
+function buildRateLimitedResult(modelId, { latencyMs = -1, isAvailable = false } = {}) {
+  return {
+    modelId,
+    latencyMs,
+    isAvailable,
+    rateLimited: true,
+    contextLength: "Rate Limited",
+    maxOutputTokens: "Rate Limited",
+    toolSupport: "",
+    toolSupportChecked: false,
+    testedAt: new Date().toLocaleString()
+  };
+}
+
+function summarizeErrorText(text, maxLength = 220) {
+  const normalized = String(text || "").replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+  return `${normalized.slice(0, maxLength - 3)}...`;
+}
+
+function getToolSupportProbePayloads(modelId) {
+  const basePayload = {
+    model: modelId,
+    messages: [
+      {
+        role: "user",
+        content: TOOL_SUPPORT_PROMPT
+      }
+    ],
+    temperature: 0,
+    max_tokens: 64
+  };
+
+  return [
+    {
+      name: "forced-tool-choice",
+      payload: {
+        ...basePayload,
+        tools: [TOOL_SUPPORT_TOOL_SCHEMA],
+        tool_choice: {
+          type: "function",
+          function: {
+            name: TOOL_SUPPORT_FUNCTION_SCHEMA.name
+          }
+        }
+      }
+    },
+    {
+      name: "auto-tool-choice",
+      payload: {
+        ...basePayload,
+        tools: [TOOL_SUPPORT_TOOL_SCHEMA],
+        tool_choice: "auto"
+      }
+    },
+    {
+      name: "tools-only",
+      payload: {
+        ...basePayload,
+        tools: [TOOL_SUPPORT_TOOL_SCHEMA]
+      }
+    },
+    {
+      name: "legacy-function-call",
+      payload: {
+        ...basePayload,
+        functions: [TOOL_SUPPORT_FUNCTION_SCHEMA],
+        function_call: {
+          name: TOOL_SUPPORT_FUNCTION_SCHEMA.name
+        }
+      }
+    }
+  ];
+}
+
+async function probeToolSupport(url, headers, modelId) {
+  const attempts = [];
+
+  for (const variant of getToolSupportProbePayloads(modelId)) {
+    try {
+      const toolProbe = await postProbeRequest(url, headers, variant.payload, {
+        modelId,
+        purpose: `Tool support (${variant.name})`,
+        timeoutMs: TOOL_SUPPORT_TIMEOUT_MS
+      });
+
+      if (toolProbe.rateLimited) {
+        return {
+          toolSupport: "",
+          toolSupportChecked: false,
+          rateLimited: true
+        };
+      }
+
+      if (toolProbe.response.ok) {
+        return {
+          toolSupport: hasToolCallInResponse(toolProbe.body),
+          toolSupportChecked: true,
+          rateLimited: false
+        };
+      }
+
+      const toolErrorText = getErrorText(toolProbe.body, toolProbe.bodyText);
+      if (isToolSupportExplicitlyUnsupported(toolProbe.response.status, toolErrorText)) {
+        return {
+          toolSupport: false,
+          toolSupportChecked: true,
+          rateLimited: false
+        };
+      }
+
+      attempts.push(
+        `${variant.name}: HTTP ${toolProbe.response.status} ${summarizeErrorText(toolErrorText)}`
+      );
+    } catch (toolError) {
+      attempts.push(`${variant.name}: ${summarizeErrorText(toolError.message)}`);
+    }
+  }
+
+  if (attempts.length > 0) {
+    console.warn(`Tool support probe inconclusive for ${modelId}: ${attempts.join(" | ")}`);
+  }
+
+  return {
+    toolSupport: "",
+    toolSupportChecked: false,
+    rateLimited: false
+  };
+}
+
 app.use(express.static(path.join(__dirname, "public")));
 
 app.get("/api/health", (_req, res) => {
@@ -711,47 +956,59 @@ app.get("/api/test-model", async (req, res) => {
   let maxOutputTokens = null;
   let toolSupport = "";
   let toolSupportChecked = false;
+  let rateLimited = false;
 
   try {
     // 1. Test Latency & Availability
     const start = Date.now();
-    const timeoutSmall = withTimeout(null, 15000);
-    const rSmall = await fetch(url, {
-      method: "POST",
+    const smallProbe = await postProbeRequest(
+      url,
       headers,
-      body: JSON.stringify({
+      {
         model: modelId,
         messages: [{ role: "user", content: "Hi" }],
         max_tokens: 1
-      }),
-      signal: timeoutSmall.signal
-    });
-    timeoutSmall.clear();
+      },
+      {
+        modelId,
+        purpose: "Availability",
+        timeoutMs: PROBE_TIMEOUT_MS
+      }
+    );
 
     // Some models may reject even simple requests if permission is wrong, but 200 means active
-    isAvailable = rSmall.ok;
-
-    // Always consume the body
-    await rSmall.text();
+    isAvailable = smallProbe.response.ok;
     latencyMs = Date.now() - start;
+
+    if (smallProbe.rateLimited) {
+      const rateLimitedResult = buildRateLimitedResult(modelId);
+      persistTestResult(modelId, rateLimitedResult);
+      return res.json(rateLimitedResult);
+    }
 
     if (isAvailable) {
       // 2. Test Context Length and Tokens via out of bounds error scraping
-      const timeoutLimit = withTimeout(null, 15000);
-      const rLimit = await fetch(url, {
-        method: "POST",
+      const limitProbe = await postProbeRequest(
+        url,
         headers,
-        body: JSON.stringify({
+        {
           model: modelId,
           messages: [{ role: "user", content: "Hi" }],
           max_tokens: 99999999
-        }),
-        signal: timeoutLimit.signal
-      });
+        },
+        {
+          modelId,
+          purpose: "Limit",
+          timeoutMs: PROBE_TIMEOUT_MS
+        }
+      );
 
-      const errorBody = await rLimit.text();
-      timeoutLimit.clear();
-      if (!rLimit.ok && errorBody) {
+      const errorBody = limitProbe.bodyText || "";
+      if (limitProbe.rateLimited) {
+        rateLimited = true;
+        contextLength = "Rate Limited";
+        maxOutputTokens = "Rate Limited";
+      } else if (!limitProbe.response.ok && errorBody) {
         // Common Context length phrases
         const ctxMatch = errorBody.match(/context length (?:is|of) (\d+)/i) ||
           errorBody.match(/max_model_len=max_total_tokens=(\d+)/i);
@@ -771,48 +1028,27 @@ app.get("/api/test-model", async (req, res) => {
         if (!contextLength && errorBody.includes("max_model_len") && errorBody.match(/max_model_len=\s*(\d+)/i)) {
           contextLength = parseInt(errorBody.match(/max_model_len=\s*(\d+)/i)[1], 10);
         }
-      } else if (rLimit.ok) {
+      } else if (limitProbe.response.ok) {
         // Model accepted the oversized max_tokens without error - no enforced limit
         if (!contextLength) contextLength = "No Limit Reported";
         if (!maxOutputTokens) maxOutputTokens = "No Limit Reported";
       }
 
       // Fallback guess: if we found contextLength but not maxOutput, it's often min(4096, contextLength)
-      if (contextLength && !maxOutputTokens) maxOutputTokens = Math.min(4096, contextLength);
+      if (typeof contextLength === "number" && !maxOutputTokens) {
+        maxOutputTokens = Math.min(4096, contextLength);
+      }
       // Conversely, if we found max completion tokens but not context, context is at least that size.
-      if (!contextLength && maxOutputTokens) contextLength = maxOutputTokens;
+      if (!contextLength && typeof maxOutputTokens === "number") {
+        contextLength = maxOutputTokens;
+      }
 
       // 3. Probe explicit function/tool calling support.
-      try {
-        const timeoutTool = withTimeout(null, 15000);
-        const rTool = await fetch(url, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            model: modelId,
-            ...TOOL_SUPPORT_REQUEST_BODY
-          }),
-          signal: timeoutTool.signal
-        });
-
-        const toolBodyText = await rTool.text();
-        timeoutTool.clear();
-        const toolBody = parseResponseBodyText(toolBodyText);
-        toolSupportChecked = true;
-
-        if (rTool.ok) {
-          toolSupport = hasToolCallInResponse(toolBody);
-        } else {
-          const toolErrorText =
-            typeof toolBody === "string" ? toolBody : JSON.stringify(toolBody ?? {});
-          toolSupport = false;
-
-          if (!/tool|function_call|tool_calls|unsupported|not been enabled/i.test(toolErrorText)) {
-            console.warn(`Tool support probe returned non-standard error for ${modelId}: ${toolErrorText}`);
-          }
-        }
-      } catch (toolError) {
-        console.warn(`Tool support probe failed for ${modelId}: ${toolError.message}`);
+      if (!rateLimited) {
+        const toolProbeResult = await probeToolSupport(url, headers, modelId);
+        rateLimited = toolProbeResult.rateLimited;
+        toolSupport = toolProbeResult.toolSupport;
+        toolSupportChecked = toolProbeResult.toolSupportChecked;
       }
     }
 
@@ -822,6 +1058,7 @@ app.get("/api/test-model", async (req, res) => {
       modelId,
       latencyMs: -1,
       isAvailable: false,
+      rateLimited: false,
       contextLength: "Error",
       maxOutputTokens: "Error",
       toolSupport: "",
@@ -837,6 +1074,7 @@ app.get("/api/test-model", async (req, res) => {
     modelId,
     latencyMs,
     isAvailable,
+    rateLimited,
     contextLength: contextLength || fallbackLabel,
     maxOutputTokens: maxOutputTokens || fallbackLabel,
     toolSupport,

@@ -39,14 +39,16 @@ export NVIDIA_API_KEY="your_actual_key"
   - blank before test completion
   - `true` when tool calls are observed
   - `false` when the tool probe completed without confirming support
+  - still blank when the tool probe is inconclusive or rate-limited
 
 ### Batch Testing
 
 - Click `Test Displayed Models`.
 - Verify rows that are missing a complete live result are tested sequentially.
 - Verify the progress area appears and the button changes to `Stop Testing`.
-- Verify the runner waits about 5 seconds between models.
-- Verify a row with missing numeric token limits gets retried once after another 5 second wait.
+- Verify the runner waits about 8 seconds between models.
+- Verify a row with missing numeric token limits gets retried once after another 8 second wait.
+- If NVIDIA returns `429`, verify the row shows `Rate Limited` and remains eligible for retry instead of being treated as a confirmed unsupported result.
 - Click `Stop Testing` and verify the batch run stops.
 
 ### Forced Batch Re-Test

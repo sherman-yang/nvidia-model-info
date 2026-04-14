@@ -37,6 +37,7 @@ Provide a local dashboard for inspecting the free model catalog on `build.nvidia
   - max output tokens
   - tool calling support
 - `Tool Support` must remain blank until a tool support probe finishes.
+- `429 Too Many Requests` responses must be treated as rate limiting, not as confirmed unsupported-tool results.
 - Batch testing must support:
   - testing currently displayed rows
   - skipping already complete rows by default

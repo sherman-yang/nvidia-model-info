@@ -20,6 +20,7 @@ const usageCloseBtn = document.getElementById("usage-close-btn");
 const usageCopyButtons = document.querySelectorAll("[data-copy-target]");
 
 const CHAT_COMPLETIONS_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
+const BATCH_TEST_DELAY_MS = 8000;
 
 const state = {
   loading: false,
@@ -42,6 +43,29 @@ const state = {
 let activeUsageSnippets = null;
 let isBatchTesting = false;
 let batchTestAbortController = null;
+
+function hasNumericProbeLimits(row) {
+  return typeof row.contextLength === "number" && typeof row.maxOutputTokens === "number";
+}
+
+function isRateLimitedRow(row) {
+  return (
+    row.rateLimited === true ||
+    row.liveTest === "Rate Limited" ||
+    row.contextLength === "Rate Limited" ||
+    row.maxOutputTokens === "Rate Limited"
+  );
+}
+
+function waitWithAbort(signal, delayMs) {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(resolve, delayMs);
+    signal.addEventListener("abort", () => {
+      clearTimeout(timeout);
+      reject(new Error("Aborted"));
+    });
+  });
+}
 
 function setStatus(text) {
   statusEl.textContent = text;
@@ -300,6 +324,7 @@ async function runLiveTest(row, btn, isRetry = false) {
     row.maxOutputTokens = "Not Tested";
     row.toolSupport = "";
     row.toolSupportChecked = false;
+    row.rateLimited = false;
     row.testedAt = "";
     row.testState = isRetry ? "retrying" : "testing";
     
@@ -323,16 +348,22 @@ async function runLiveTest(row, btn, isRetry = false) {
     if (!r.ok) throw new Error(data.error || "Bad status");
 
     // Update local state row
-    row.liveTest = `${data.latencyMs}ms (${data.isAvailable ? 'OK' : 'Fail'})`;
+    row.liveTest =
+      data.rateLimited && !data.isAvailable
+        ? "Rate Limited"
+        : `${data.latencyMs}ms (${data.isAvailable ? 'OK' : 'Fail'})`;
     row.latencyMs = data.latencyMs;
     row.contextLength = data.contextLength;
     row.maxOutputTokens = data.maxOutputTokens;
     row.toolSupport = data.toolSupportChecked ? Boolean(data.toolSupport) : "";
     row.toolSupportChecked = Boolean(data.toolSupportChecked);
+    row.rateLimited = Boolean(data.rateLimited);
     row.testedAt = data.testedAt || "";
 
     // Determine state
-    if (!data.isAvailable) {
+    if (data.rateLimited) {
+      row.testState = "warning";
+    } else if (!data.isAvailable) {
       row.testState = "error";
     } else {
       const hasNumbers = typeof data.contextLength === 'number' || typeof data.maxOutputTokens === 'number';
@@ -348,6 +379,7 @@ async function runLiveTest(row, btn, isRetry = false) {
     row.maxOutputTokens = "Error";
     row.toolSupport = "";
     row.toolSupportChecked = false;
+    row.rateLimited = false;
     row.testedAt = "";
     row.testState = "error";
     render();
@@ -381,7 +413,7 @@ async function runBatchTest(force = false) {
   // Pre-clear all target rows so the user instantly sees the entire queue mapped out
   const rowsToClear = [];
   for (const row of visibleRows) {
-    const hasNumericLimits = typeof row.contextLength === 'number' && typeof row.maxOutputTokens === 'number';
+    const hasNumericLimits = hasNumericProbeLimits(row);
     const isAlreadyTestedOk =
       row.liveTest &&
       typeof row.liveTest === 'string' &&
@@ -396,6 +428,7 @@ async function runBatchTest(force = false) {
       row.maxOutputTokens = "Not Tested";
       row.toolSupport = "";
       row.toolSupportChecked = false;
+      row.rateLimited = false;
       row.testedAt = "";
       row.testState = "";
       rowsToClear.push(row.modelId);
@@ -423,7 +456,7 @@ async function runBatchTest(force = false) {
 
     // Skip if already tested with numeric limits, unless forcing
     // Models that were tested but got non-numeric results (Error, No Limit Reported, etc.) are retested
-    const hasNumericLimits = typeof row.contextLength === 'number' && typeof row.maxOutputTokens === 'number';
+    const hasNumericLimits = hasNumericProbeLimits(row);
     if (
       !force &&
       row.liveTest &&
@@ -439,7 +472,7 @@ async function runBatchTest(force = false) {
 
     count++;
     batchProgress.value = count;
-    batchStatus.textContent = `Batch testing ${force ? '(Forced) ' : ''}${count}/${visibleRows.length}: ${row.modelId}... (5s delay to avoid rate limits)`;
+    batchStatus.textContent = `Batch testing ${force ? '(Forced) ' : ''}${count}/${visibleRows.length}: ${row.modelId}... (${Math.round(BATCH_TEST_DELAY_MS / 1000)}s delay to avoid rate limits)`;
 
     const tr = document.querySelector(`tr[data-model-id="${row.modelId}"]`);
     const btn = tr ? tr.querySelector('.live-test-btn') : null;
@@ -449,11 +482,11 @@ async function runBatchTest(force = false) {
     // Check if we need to retry — no numeric limits found
     const gotNumericCtx = typeof row.contextLength === "number";
     const gotNumericOut = typeof row.maxOutputTokens === "number";
-    const needsRetry = !gotNumericCtx && !gotNumericOut;
+    const needsRetry = (!gotNumericCtx && !gotNumericOut) || isRateLimitedRow(row);
 
     if (needsRetry && !signal.aborted) {
       // Update batchStatus text — this element is NEVER destroyed by render()
-      batchStatus.textContent = `⟳ Retrying ${count}/${visibleRows.length}: ${row.modelId}... (waiting 5s)`;
+      batchStatus.textContent = `⟳ Retrying ${count}/${visibleRows.length}: ${row.modelId}... (waiting ${Math.round(BATCH_TEST_DELAY_MS / 1000)}s)`;
 
       // Re-query button from fresh DOM (render() rebuilt the table)
       const freshBtn = document.querySelector(`tr[data-model-id="${row.modelId}"] .live-test-btn`);
@@ -465,13 +498,7 @@ async function runBatchTest(force = false) {
 
       // Wait before retry
       try {
-        await new Promise((resolve, reject) => {
-          const timeout = setTimeout(resolve, 5000);
-          signal.addEventListener('abort', () => {
-            clearTimeout(timeout);
-            reject(new Error('Aborted'));
-          });
-        });
+        await waitWithAbort(signal, BATCH_TEST_DELAY_MS);
       } catch (e) {
         break; // aborted
       }
@@ -483,16 +510,10 @@ async function runBatchTest(force = false) {
       }
     }
 
-    // Wait ~5000ms before next test to stay under 40 requests/min
+    // Wait before the next model-level test to stay below the free-tier rate cap.
     if (count < visibleRows.length && !signal.aborted) {
       try {
-        await new Promise((resolve, reject) => {
-          const timeout = setTimeout(resolve, 5000);
-          signal.addEventListener('abort', () => {
-            clearTimeout(timeout);
-            reject(new Error('Aborted'));
-          });
-        });
+        await waitWithAbort(signal, BATCH_TEST_DELAY_MS);
       } catch (e) {
         break; // aborted
       }
@@ -700,9 +721,12 @@ async function loadData(forceRefresh = false) {
     state.rows.forEach(row => {
       row.toolSupportChecked = row.toolSupportChecked === true;
       row.toolSupport = row.toolSupportChecked ? row.toolSupport === true : "";
+      row.rateLimited = Boolean(row.rateLimited) || isRateLimitedRow(row);
       const live = String(row.liveTest || "");
       if (live === "Test") {
         row.testState = "";
+      } else if (row.rateLimited) {
+        row.testState = "warning";
       } else if (live.includes("Error") || live.includes("Inactive")) {
         row.testState = "error";
       } else {

@@ -63,8 +63,9 @@ Click `Test Displayed Models` to batch-test the rows that are currently displaye
 
 - Rows that already have latency, numeric token limits, and a completed tool support probe are skipped by default.
 - Hold `Shift` while clicking to force a re-test of every displayed row.
-- The batch runner waits 5 seconds between models.
-- If a test does not return numeric token limits, the frontend waits 5 seconds and retries that model once.
+- The batch runner waits 8 seconds between models.
+- If a test does not return numeric token limits, the frontend waits another 8 seconds and retries that model once.
+- The backend also paces individual probe requests globally so the NVIDIA free-tier 40 RPM limit is less likely to be exceeded.
 - Click the button again while a batch is running to stop it.
 
 ## Understanding The Key Columns
@@ -76,6 +77,8 @@ Click `Test Displayed Models` to batch-test the rows that are currently displaye
   - blank = not tested yet
   - `true` = tool calling support confirmed
   - `false` = tool support probe completed but did not confirm tool calling
+- The backend tries several tool-calling payload variants before leaving `Tool Support` blank.
+- `Rate Limited`: the NVIDIA API returned `429 Too Many Requests`. These rows are left retryable instead of being treated as confirmed failures.
 - `Tested At`: Local timestamp saved with the last completed live probe.
 
 ## Row Usage Popover
@@ -109,5 +112,6 @@ Use this when you want to discard all current test results and start from a clea
 - `Not Tested` or blank `Tool Support`: the row has not completed a live test yet.
 - `Unknown`: the model responded, but the token limit probe did not produce a numeric limit.
 - `No Limit Reported`: the model accepted the oversized token test without exposing a hard limit.
+- `Rate Limited`: the backend hit NVIDIA's request cap and backed off. Retry the row later or rerun the batch after the cooldown window.
 - `Inactive`: the availability test failed for that model.
 - `Error`: the probe failed before a usable result could be determined.

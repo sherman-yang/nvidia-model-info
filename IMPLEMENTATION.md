@@ -61,16 +61,23 @@ All remaining metadata keys are flattened and appended as sortable columns.
    - sends a minimal chat completion request
    - `200` means available
    - latency is measured client-side around that request
+   - all probe requests pass through a shared rate limiter before the request is sent
 
 2. Token limit probe
    - sends an oversized `max_tokens` request
    - parses NVIDIA response text for context limit and output limit values
    - if the model accepts the oversized value, the row falls back to `No Limit Reported`
+   - if NVIDIA still returns `429`, the row falls back to `Rate Limited`
 
 3. Tool support probe
-   - sends a chat completion request with `tools` and `tool_choice`
+   - tries several request variants in sequence:
+     - forced `tool_choice`
+     - `tool_choice: "auto"`
+     - `tools` without `tool_choice`
+     - legacy `functions` plus `function_call`
    - marks `toolSupport=true` only when the response actually includes tool calls
-   - leaves `toolSupportChecked=false` if the probe fails before a definite result
+   - marks `toolSupport=false` only for explicit unsupported-tool errors
+   - leaves `toolSupportChecked=false` if the probe is rate-limited, times out, or returns any other inconclusive error
 
 The final result is written to `model_limits_cache.json` and the in-memory payload cache is invalidated.
 
@@ -88,6 +95,8 @@ There are two cache layers:
   - stores per-model live probe results across page reloads and server restarts
 
 `Force Refresh Data` clears both layers.
+
+The backend also keeps a global probe pacing window for `/api/test-model` requests so repeated single-clicks or batch tests do not fire raw probe traffic straight through to NVIDIA at full speed.
 
 ## Frontend Responsibilities
 
@@ -117,8 +126,8 @@ The frontend:
   - numeric `maxOutputTokens`
   - `toolSupportChecked === true`
 - `Shift + Click` forces re-testing of every displayed row.
-- The batch runner waits 5 seconds between models.
-- If a row still lacks numeric token limits after a run, it retries once after another 5 seconds.
+- The batch runner waits 8 seconds between models.
+- If a row still lacks numeric token limits after a run, or the row is marked `Rate Limited`, it retries once after another 8 seconds.
 
 ### Tool Support Display
 
@@ -127,6 +136,8 @@ The frontend:
 - blank: not tested
 - `true`: supported
 - `false`: tested but not confirmed
+
+Rows that hit NVIDIA rate limits show `Rate Limited` in the live probe output and remain retryable.
 
 ## Startup Flow
 
@@ -151,5 +162,11 @@ Supported environment variables:
 - `MAX_CONCURRENCY`
 - `REQUEST_TIMEOUT_MS`
 - `CACHE_TTL_MS`
+- `PROBE_RATE_LIMIT_RPM`
+- `PROBE_MIN_INTERVAL_MS`
+- `PROBE_TIMEOUT_MS`
+- `TOOL_SUPPORT_TIMEOUT_MS`
+- `PROBE_MAX_429_RETRIES`
+- `PROBE_429_BACKOFF_MS`
 
 `.env` loading is intentionally not used.
