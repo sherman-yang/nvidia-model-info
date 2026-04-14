@@ -38,8 +38,9 @@ export NVIDIA_API_KEY="your_actual_key"
 - Verify `Tool Support` is:
   - blank before test completion
   - `true` when tool calls are observed
-  - `false` when the tool probe completed without confirming support
+  - `false` when the tool probe ends with explicit unsupported-tool evidence or accepted requests still do not emit tool calls
   - still blank when the tool probe is inconclusive or rate-limited
+- Hover the `Tool Support` cell on a false or inconclusive row and verify the tooltip explains the stored reason and probe summary.
 
 ### Batch Testing
 
@@ -49,6 +50,7 @@ export NVIDIA_API_KEY="your_actual_key"
 - Verify the runner waits about 8 seconds between models.
 - Verify a row with missing numeric token limits gets retried once after another 8 second wait.
 - If NVIDIA returns `429`, verify the row shows `Rate Limited` and remains eligible for retry instead of being treated as a confirmed unsupported result.
+- If a model accepts a tool request but stops with `finish_reason="length"` before returning a tool call, verify the backend retries that variant with a larger `max_tokens` budget before concluding `false`.
 - Click `Stop Testing` and verify the batch run stops.
 
 ### Forced Batch Re-Test
@@ -67,9 +69,10 @@ export NVIDIA_API_KEY="your_actual_key"
 ### Usage Popover
 
 - Right-click a row.
-- Verify the popover opens with cURL, Python, and JavaScript snippets.
-- Verify the snippets reference `NVIDIA_API_KEY`.
-- Verify the copy buttons place the expected snippet text on the clipboard.
+- Verify the popover opens with only a cURL snippet.
+- Verify the snippet references `NVIDIA_API_KEY`.
+- Verify the note explains that the hosted endpoint does not currently expose `/v1/messages`.
+- Verify the copy button places the expected cURL text on the clipboard.
 
 ## Static Verification
 

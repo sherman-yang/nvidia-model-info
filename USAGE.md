@@ -76,20 +76,19 @@ Click `Test Displayed Models` to batch-test the rows that are currently displaye
 - `Tool Support`:
   - blank = not tested yet
   - `true` = tool calling support confirmed
-  - `false` = tool support probe completed but did not confirm tool calling
-- The backend tries several tool-calling payload variants before leaving `Tool Support` blank.
+  - `false` = the probe completed and concluded either that tool fields are explicitly unsupported or that accepted requests still did not emit tool calls
+- The backend tries several tool-calling payload variants, expands the unsupported classification for tool-field validation errors, and retries accepted-but-truncated responses with a larger `max_tokens` budget before leaving `Tool Support` blank.
 - `Rate Limited`: the NVIDIA API returned `429 Too Many Requests`. These rows are left retryable instead of being treated as confirmed failures.
 - `Tested At`: Local timestamp saved with the last completed live probe.
+- Hover the `Tool Support` cell to inspect the stored reason summary for `false` or inconclusive results.
 
 ## Row Usage Popover
 
-Right-click any model row to open a usage popover with copyable examples for:
+Right-click any model row to open a usage popover with a copyable cURL example.
 
-- cURL
-- Python `requests`
-- JavaScript `fetch`
+The snippet always references `NVIDIA_API_KEY` and is generated for that specific model ID.
 
-The snippets always reference `NVIDIA_API_KEY` and are generated for that specific model ID.
+The popover does not include a Claude Code command for the hosted API. On `2026-04-14`, the hosted endpoint `https://integrate.api.nvidia.com/v1/messages` returned `404 page not found`, so the Anthropic-compatible path required by Claude Code is not currently available there.
 
 ## Force Refresh Data
 
@@ -110,7 +109,9 @@ Use this when you want to discard all current test results and start from a clea
 - API key missing: verify `NVIDIA_API_KEY` is exported in the same shell that launches `./start.sh`.
 - Port already in use: set another port, for example `PORT=5000 ./start.sh`.
 - `Not Tested` or blank `Tool Support`: the row has not completed a live test yet.
+- blank `Tool Support` with a tooltip reason like `Rate Limited`, `Backend Error`, or `Timeout`: the tool probe ran but stayed inconclusive, so the row remains retryable.
 - `Unknown`: the model responded, but the token limit probe did not produce a numeric limit.
+- metadata-backed numeric `Context Limit` or `Max Output`: the dashboard found a numeric value in model metadata and reused it instead of depending only on live error scraping.
 - `No Limit Reported`: the model accepted the oversized token test without exposing a hard limit.
 - `Rate Limited`: the backend hit NVIDIA's request cap and backed off. Retry the row later or rerun the batch after the cooldown window.
 - `Inactive`: the availability test failed for that model.
