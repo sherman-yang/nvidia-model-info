@@ -13,9 +13,8 @@ const usagePopover = document.getElementById("usage-popover");
 const usageTitle = document.getElementById("usage-title");
 const usageSubtitle = document.getElementById("usage-subtitle");
 const usageMeta = document.getElementById("usage-meta");
+const usageNote = document.getElementById("usage-note");
 const usageCurl = document.getElementById("usage-curl");
-const usagePython = document.getElementById("usage-python");
-const usageJavascript = document.getElementById("usage-javascript");
 const usageCloseBtn = document.getElementById("usage-close-btn");
 const usageCopyButtons = document.querySelectorAll("[data-copy-target]");
 
@@ -122,6 +121,51 @@ function isFiniteNumber(value) {
   return Number.isFinite(n);
 }
 
+function parseTokenCount(value) {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return Math.round(value);
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim().replace(/,/g, "");
+  if (!normalized) {
+    return null;
+  }
+
+  const compact = normalized.replace(/\s+/g, "");
+  const compactMatch = compact.match(/^(\d+(?:\.\d+)?)([kmb])?$/i);
+  if (compactMatch) {
+    const amount = Number(compactMatch[1]);
+    const suffix = compactMatch[2] ? compactMatch[2].toLowerCase() : "";
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return null;
+    }
+
+    if (suffix === "k") return Math.round(amount * 1024);
+    if (suffix === "m") return Math.round(amount * 1024 * 1024);
+    if (suffix === "b") return Math.round(amount * 1024 * 1024 * 1024);
+    return Math.round(amount);
+  }
+
+  const embeddedMatch = normalized.match(/(\d+(?:\.\d+)?)\s*([kmb])\b/i);
+  if (embeddedMatch) {
+    const amount = Number(embeddedMatch[1]);
+    const suffix = embeddedMatch[2].toLowerCase();
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return null;
+    }
+
+    if (suffix === "k") return Math.round(amount * 1024);
+    if (suffix === "m") return Math.round(amount * 1024 * 1024);
+    if (suffix === "b") return Math.round(amount * 1024 * 1024 * 1024);
+  }
+
+  return null;
+}
+
 function findValueByKeyCandidates(row, candidates) {
   const keys = Object.keys(row);
 
@@ -164,7 +208,8 @@ function buildUsageSnippets(row) {
     "completion_token_limit"
   ]);
 
-  const maxTokens = isFiniteNumber(maxOutputTokensValue) ? Number(maxOutputTokensValue) : 512;
+  const parsedMaxOutputTokens = parseTokenCount(maxOutputTokensValue);
+  const maxTokens = parsedMaxOutputTokens ? Math.min(parsedMaxOutputTokens, 512) : 512;
   const contextLengthText = contextLengthValue !== null ? String(contextLengthValue) : "Unknown";
   const maxOutputText = maxOutputTokensValue !== null ? String(maxOutputTokensValue) : "Unknown";
 
@@ -176,26 +221,20 @@ function buildUsageSnippets(row) {
   };
 
   const payloadJsonCompact = JSON.stringify(payload);
-  const payloadJson = JSON.stringify(payload, null, 2);
-
   const curlPayloadForShell = payloadJsonCompact.replace(/'/g, "'\"'\"'");
   const curl = `curl -X POST "${CHAT_COMPLETIONS_URL}" \\
   -H "Authorization: Bearer $NVIDIA_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '${curlPayloadForShell}'`;
 
-  const python = `import os\nimport requests\n\nurl = "${CHAT_COMPLETIONS_URL}"\nheaders = {\n    "Authorization": f"Bearer {os.environ['NVIDIA_API_KEY']}",\n    "Content-Type": "application/json"\n}\npayload = ${payloadJson}\n\nresp = requests.post(url, headers=headers, json=payload, timeout=60)\nresp.raise_for_status()\nprint(resp.json())`;
-
-  const javascript = `const url = "${CHAT_COMPLETIONS_URL}";\nconst payload = ${payloadJson};\n\nconst resp = await fetch(url, {\n  method: "POST",\n  headers: {\n    Authorization: \`Bearer \${process.env.NVIDIA_API_KEY}\`,\n    "Content-Type": "application/json"\n  },\n  body: JSON.stringify(payload)\n});\n\nif (!resp.ok) {\n  throw new Error(\`HTTP \${resp.status}: \${await resp.text()}\`);\n}\n\nconsole.log(await resp.json());`;
-
   return {
     modelId,
     contextLengthText,
     maxOutputText,
+    note:
+      "Claude Code command is not shown because the hosted integrate.api.nvidia.com endpoint currently returns 404 for /v1/messages. Keep using the cURL example for this hosted API.",
     snippets: {
-      curl,
-      python,
-      javascript
+      curl
     }
   };
 }
@@ -214,9 +253,8 @@ function showUsagePopover(row, clientX, clientY) {
   usageTitle.textContent = "Model Usage Examples";
   usageSubtitle.textContent = `Model: ${usage.modelId}`;
   usageMeta.textContent = `context_length: ${usage.contextLengthText} | max_output_tokens: ${usage.maxOutputText} | API Key Env Var: NVIDIA_API_KEY`;
+  usageNote.textContent = usage.note;
   usageCurl.textContent = usage.snippets.curl;
-  usagePython.textContent = usage.snippets.python;
-  usageJavascript.textContent = usage.snippets.javascript;
 
   usagePopover.hidden = false;
   usagePopover.style.left = "0px";
@@ -330,6 +368,37 @@ function applyColumnSizing(cell, columnKey) {
   cell.style.maxWidth = `${width}px`;
 }
 
+function humanizeToolSupportReason(reason) {
+  const labels = {
+    supported: "Supported",
+    unsupported: "Unsupported",
+    no_tool_call_observed: "No Tool Call Observed",
+    rate_limited: "Rate Limited",
+    timeout: "Timeout",
+    backend_error: "Backend Error",
+    inconclusive: "Inconclusive",
+    request_error: "Request Error"
+  };
+
+  return labels[reason] || "Unknown";
+}
+
+function buildToolSupportTitle(row) {
+  if (!row.toolSupportReason && !row.toolSupportSummary) {
+    return "";
+  }
+
+  const parts = [];
+  if (row.toolSupportReason) {
+    parts.push(`Reason: ${humanizeToolSupportReason(row.toolSupportReason)}`);
+  }
+  if (row.toolSupportSummary) {
+    parts.push(`Detail: ${row.toolSupportSummary}`);
+  }
+
+  return parts.join("\n");
+}
+
 function formatTokensToK(val) {
   if (typeof val === "number") {
     return Math.round(val / 1024) + "K";
@@ -355,6 +424,8 @@ async function runLiveTest(row, btn, isRetry = false) {
     row.maxOutputTokens = "Not Tested";
     row.toolSupport = "";
     row.toolSupportChecked = false;
+    row.toolSupportReason = "";
+    row.toolSupportSummary = "";
     row.rateLimited = false;
     row.testedAt = "";
     row.testState = isRetry ? "retrying" : "testing";
@@ -388,6 +459,8 @@ async function runLiveTest(row, btn, isRetry = false) {
     row.maxOutputTokens = data.maxOutputTokens;
     row.toolSupport = data.toolSupportChecked ? Boolean(data.toolSupport) : "";
     row.toolSupportChecked = Boolean(data.toolSupportChecked);
+    row.toolSupportReason = data.toolSupportReason || "";
+    row.toolSupportSummary = data.toolSupportSummary || "";
     row.rateLimited = Boolean(data.rateLimited);
     row.testedAt = data.testedAt || "";
 
@@ -410,6 +483,8 @@ async function runLiveTest(row, btn, isRetry = false) {
     row.maxOutputTokens = "Error";
     row.toolSupport = "";
     row.toolSupportChecked = false;
+    row.toolSupportReason = "request_error";
+    row.toolSupportSummary = e.message || "";
     row.rateLimited = false;
     row.testedAt = "";
     row.testState = "error";
@@ -459,6 +534,8 @@ async function runBatchTest(force = false) {
       row.maxOutputTokens = "Not Tested";
       row.toolSupport = "";
       row.toolSupportChecked = false;
+      row.toolSupportReason = "";
+      row.toolSupportSummary = "";
       row.rateLimited = false;
       row.testedAt = "";
       row.testState = "";
@@ -635,6 +712,7 @@ function renderTableBody(rows) {
         td.textContent = value === null || value === undefined ? "" : formatTokensToK(value);
       } else if (columnKey === "toolSupport") {
         td.textContent = row.toolSupportChecked === true ? (value === true ? "true" : "false") : "";
+        td.title = buildToolSupportTitle(row);
       } else {
         td.textContent = value === null || value === undefined ? "" : String(value);
       }
@@ -754,6 +832,8 @@ async function loadData(forceRefresh = false) {
     state.rows.forEach(row => {
       row.toolSupportChecked = row.toolSupportChecked === true;
       row.toolSupport = row.toolSupportChecked ? row.toolSupport === true : "";
+      row.toolSupportReason = row.toolSupportReason || "";
+      row.toolSupportSummary = row.toolSupportSummary || "";
       row.rateLimited = Boolean(row.rateLimited) || isRateLimitedRow(row);
       const live = String(row.liveTest || "");
       if (live === "Test") {

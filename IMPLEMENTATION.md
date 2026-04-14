@@ -51,7 +51,7 @@ Each row begins with stable fields such as:
 
 All remaining metadata keys are flattened and appended as sortable columns.
 
-`toolSupportChecked` is stored internally and persisted in cache, but hidden from the table.
+`toolSupportChecked`, `toolSupportReason`, `toolSupportSummary`, and `rateLimited` are stored internally and persisted in cache, but hidden from the table.
 
 ## Live Test Flow
 
@@ -64,19 +64,21 @@ All remaining metadata keys are flattened and appended as sortable columns.
    - all probe requests pass through a shared rate limiter before the request is sent
 
 2. Token limit probe
-   - sends an oversized `max_tokens` request
+   - first reuses numeric metadata hints already present in the cached row when available
+   - sends an oversized `max_tokens` request only if a live context or output value is still missing
    - parses NVIDIA response text for context limit and output limit values
-   - if the model accepts the oversized value, the row falls back to `No Limit Reported`
-   - if NVIDIA still returns `429`, the row falls back to `Rate Limited`
+   - if the model accepts the oversized value, only the still-missing side falls back to `No Limit Reported`
+   - if NVIDIA returns `429`, only the still-missing side falls back to `Rate Limited`
 
 3. Tool support probe
    - tries several request variants in sequence:
-     - forced `tool_choice`
-     - `tool_choice: "auto"`
      - `tools` without `tool_choice`
+     - `tool_choice: "auto"`
+     - forced `tool_choice`
      - legacy `functions` plus `function_call`
+   - starts with a small `max_tokens` budget and retries the same accepted request once with a larger budget when the response stops with `finish_reason="length"` before producing tool calls
    - marks `toolSupport=true` only when the response actually includes tool calls
-   - marks `toolSupport=false` only for explicit unsupported-tool errors
+   - marks `toolSupport=false` only when the probe ends with explicit unsupported-tool evidence or when accepted requests still fail to emit tool calls after the retry path
    - leaves `toolSupportChecked=false` if the probe is rate-limited, times out, or returns any other inconclusive error
 
 The final result is written to `model_limits_cache.json` and the in-memory payload cache is invalidated.
@@ -135,9 +137,15 @@ The frontend:
 
 - blank: not tested
 - `true`: supported
-- `false`: tested but not confirmed
+- `false`: explicitly unsupported or accepted but still no tool call observed
 
-Rows that hit NVIDIA rate limits show `Rate Limited` in the live probe output and remain retryable.
+Rows that hit NVIDIA rate limits show `Rate Limited` in the live probe output and remain retryable. The `Tool Support` cell title carries `toolSupportReason` and `toolSupportSummary` so false or inconclusive results can be inspected without adding another visible column.
+
+### Usage Popover
+
+The right-click popover keeps only the hosted cURL example for `https://integrate.api.nvidia.com/v1/chat/completions`.
+
+It intentionally omits a Claude Code command because the hosted endpoint used by this dashboard did not expose `/v1/messages` when verified on `2026-04-14`. Claude Code requires an Anthropic-compatible `/v1/messages` backend, so showing that command here would be misleading.
 
 ## Startup Flow
 
