@@ -36,7 +36,26 @@ const cache = {
 let probeRateLimitChain = Promise.resolve();
 let nextProbeSlotAt = 0;
 
-const TOOL_SUPPORT_PROMPT = "Call the tool exactly once with location set to Calgary. Do not answer normally.";
+const TOOL_SUPPORT_PROMPT =
+  "Call the tool exactly once with location set to Calgary. Do not answer normally. Return immediately with the tool call and no extra reasoning.";
+const TOOL_SUPPORT_MAX_TOKENS = 64;
+const TOOL_SUPPORT_RETRY_MAX_TOKENS = 192;
+const METADATA_CONTEXT_KEY_CANDIDATES = [
+  "context_length",
+  "contextlength",
+  "context_window",
+  "contextwindow",
+  "max_input_tokens",
+  "maxinputtokens",
+  "input_token_limit"
+];
+const METADATA_OUTPUT_KEY_CANDIDATES = [
+  "max_output_tokens",
+  "maxoutputtokens",
+  "output_token_limit",
+  "max_tokens",
+  "completion_token_limit"
+];
 const TOOL_SUPPORT_FUNCTION_SCHEMA = {
   name: "get_weather",
   description: "Get weather for a location.",
@@ -317,9 +336,13 @@ function flattenObject(source, target, prefix) {
   }
 }
 
-function findValueByKeyCandidates(obj, candidates) {
+function findValueByKeyCandidates(obj, candidates, { keyPrefix = "" } = {}) {
   const keys = Object.keys(obj);
   for (const key of keys) {
+    if (keyPrefix && !key.startsWith(keyPrefix)) {
+      continue;
+    }
+
     const lowered = key.toLowerCase();
 
     // We only care about the inner key name if it's formatted like `metadata.foo`
@@ -331,6 +354,78 @@ function findValueByKeyCandidates(obj, candidates) {
     }
   }
   return null;
+}
+
+function parseTokenCount(value) {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return Math.round(value);
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim().replace(/,/g, "");
+  if (!normalized) {
+    return null;
+  }
+
+  const compact = normalized.replace(/\s+/g, "");
+  const compactMatch = compact.match(/^(\d+(?:\.\d+)?)([kmb])?$/i);
+  if (compactMatch) {
+    const amount = Number(compactMatch[1]);
+    const suffix = compactMatch[2] ? compactMatch[2].toLowerCase() : "";
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return null;
+    }
+
+    if (suffix === "k") return Math.round(amount * 1024);
+    if (suffix === "m") return Math.round(amount * 1024 * 1024);
+    if (suffix === "b") return Math.round(amount * 1024 * 1024 * 1024);
+    return Math.round(amount);
+  }
+
+  const embeddedMatch = normalized.match(/(\d+(?:\.\d+)?)\s*([kmb])\b/i);
+  if (embeddedMatch) {
+    const amount = Number(embeddedMatch[1]);
+    const suffix = embeddedMatch[2].toLowerCase();
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return null;
+    }
+
+    if (suffix === "k") return Math.round(amount * 1024);
+    if (suffix === "m") return Math.round(amount * 1024 * 1024);
+    if (suffix === "b") return Math.round(amount * 1024 * 1024 * 1024);
+  }
+
+  return null;
+}
+
+function getCachedMetadataTokenHints(modelId) {
+  const rows = cache.payload && Array.isArray(cache.payload.rows) ? cache.payload.rows : null;
+  if (!rows) {
+    return {
+      contextLength: null,
+      maxOutputTokens: null
+    };
+  }
+
+  const row = rows.find((item) => item.modelId === modelId);
+  if (!row) {
+    return {
+      contextLength: null,
+      maxOutputTokens: null
+    };
+  }
+
+  return {
+    contextLength: parseTokenCount(
+      findValueByKeyCandidates(row, METADATA_CONTEXT_KEY_CANDIDATES, { keyPrefix: "metadata." })
+    ),
+    maxOutputTokens: parseTokenCount(
+      findValueByKeyCandidates(row, METADATA_OUTPUT_KEY_CANDIDATES, { keyPrefix: "metadata." })
+    )
+  };
 }
 
 function toRow(listModel, metadata) {
@@ -367,6 +462,9 @@ function toRow(listModel, metadata) {
   row.latencyMs = ""; // Populated by live test
   row.toolSupport = ""; // Populated by live test
   row.toolSupportChecked = false; // Internal marker used to decide whether re-testing is needed
+  row.toolSupportReason = ""; // Internal classification of the latest tool probe result
+  row.toolSupportSummary = ""; // Internal summary kept for diagnostics/tooltips
+  row.rateLimited = false; // Internal marker for non-terminal 429 probe results
   row.testedAt = ""; // Populated by live test
 
   return row;
@@ -575,7 +673,10 @@ function buildColumns(rows) {
     "metadata.id",
     "metadata.object",
     "listObject",
-    "toolSupportChecked"
+    "toolSupportChecked",
+    "toolSupportReason",
+    "toolSupportSummary",
+    "rateLimited"
   ]);
 
   const keySet = new Set();
@@ -632,6 +733,9 @@ async function loadModelsWithMetadata({ forceRefresh = false } = {}) {
           row.latencyMs = tc.latencyMs >= 0 ? tc.latencyMs : "";
           row.toolSupport = tc.toolSupportChecked ? Boolean(tc.toolSupport) : "";
           row.toolSupportChecked = Boolean(tc.toolSupportChecked);
+          row.toolSupportReason = tc.toolSupportReason || "";
+          row.toolSupportSummary = tc.toolSupportSummary || "";
+          row.rateLimited = Boolean(tc.rateLimited);
           row.testedAt = tc.testedAt || "";
           
           if (tc.rateLimited || tc.contextLength === "Rate Limited" || tc.maxOutputTokens === "Rate Limited") {
@@ -717,6 +821,33 @@ function hasToolCallInResponse(body) {
   return toolCalls.length > 0 || Boolean(message?.function_call);
 }
 
+function shouldRetryAcceptedToolProbe(body) {
+  if (!body || typeof body !== "object") {
+    return false;
+  }
+
+  const choice = Array.isArray(body.choices) ? body.choices[0] : null;
+  if (!choice || typeof choice !== "object") {
+    return false;
+  }
+
+  if (choice.finish_reason !== "length") {
+    return false;
+  }
+
+  const message = choice.message && typeof choice.message === "object" ? choice.message : null;
+  const signals = [
+    message?.reasoning,
+    message?.reasoning_content,
+    message?.content
+  ]
+    .filter((value) => typeof value === "string")
+    .join(" ")
+    .toLowerCase();
+
+  return /tool call|call the tool|function call|get_weather|tool invocation/.test(signals);
+}
+
 function getErrorText(body, bodyText) {
   if (typeof body === "string") {
     return body;
@@ -729,24 +860,6 @@ function getErrorText(body, bodyText) {
   return JSON.stringify(body ?? {});
 }
 
-function isToolSupportExplicitlyUnsupported(status, errorText) {
-  if (status < 400 || status >= 500) {
-    return false;
-  }
-
-  const normalized = String(errorText || "").toLowerCase();
-  return (
-    /tool(s)? (is|are)? not (enabled|supported|available)/i.test(normalized) ||
-    /tool[_ ]?calls? (is|are)? not (enabled|supported|available)/i.test(normalized) ||
-    /does not support tool/i.test(normalized) ||
-    /does not support function/i.test(normalized) ||
-    /function calling (is|not)? ?supported/i.test(normalized) ||
-    /tool_choice.*not supported/i.test(normalized) ||
-    /unsupported.*tool/i.test(normalized) ||
-    /unsupported.*function/i.test(normalized)
-  );
-}
-
 function buildRateLimitedResult(modelId, { latencyMs = -1, isAvailable = false } = {}) {
   return {
     modelId,
@@ -757,6 +870,8 @@ function buildRateLimitedResult(modelId, { latencyMs = -1, isAvailable = false }
     maxOutputTokens: "Rate Limited",
     toolSupport: "",
     toolSupportChecked: false,
+    toolSupportReason: "rate_limited",
+    toolSupportSummary: "",
     testedAt: new Date().toLocaleString()
   };
 }
@@ -769,6 +884,126 @@ function summarizeErrorText(text, maxLength = 220) {
   return `${normalized.slice(0, maxLength - 3)}...`;
 }
 
+function classifyAvailabilityError(status, errorText) {
+  const normalized = String(errorText || "").toLowerCase();
+
+  if (status === 429 || /too many requests/i.test(normalized)) {
+    return "rate_limited";
+  }
+
+  if (/timed out/i.test(normalized)) {
+    return "timeout";
+  }
+
+  if (
+    status >= 500 ||
+    /internal server error/i.test(normalized) ||
+    /enginecore encountered an issue/i.test(normalized) ||
+    /inference connection error/i.test(normalized)
+  ) {
+    return "backend_error";
+  }
+
+  if (
+    status === 401 ||
+    status === 403 ||
+    /unauthorized/i.test(normalized) ||
+    /forbidden/i.test(normalized) ||
+    /invalid api key/i.test(normalized) ||
+    /authentication/i.test(normalized)
+  ) {
+    return "auth_error";
+  }
+
+  if (
+    status === 404 ||
+    /does not exist/i.test(normalized) ||
+    /not found/i.test(normalized) ||
+    /model .* unsupported/i.test(normalized) ||
+    /unsupported by/i.test(normalized) ||
+    /not currently supported/i.test(normalized)
+  ) {
+    return "unavailable";
+  }
+
+  if (
+    (status === 400 || status === 422) &&
+    (
+      /chat/i.test(normalized) ||
+      /completion/i.test(normalized) ||
+      /model/i.test(normalized) ||
+      /messages/i.test(normalized) ||
+      /max_tokens/i.test(normalized)
+    )
+  ) {
+    return "unavailable";
+  }
+
+  return "request_error";
+}
+
+function classifyToolSupportError(status, errorText) {
+  const normalized = String(errorText || "").toLowerCase();
+  const mentionsToolFields =
+    /(tools|tool_choice|function_call|functions|tool use|tool[_ ]?calls?)/i.test(normalized);
+
+  if (status === 429 || /too many requests/i.test(normalized)) {
+    return "rate_limited";
+  }
+
+  if (
+    status >= 500 ||
+    /internal server error/i.test(normalized) ||
+    /enginecore encountered an issue/i.test(normalized) ||
+    /inference connection error/i.test(normalized)
+  ) {
+    return "backend_error";
+  }
+
+  if (/timed out/i.test(normalized)) {
+    return "timeout";
+  }
+
+  if (
+    /tool use has not been enabled/i.test(normalized) ||
+    (/unsupported by/i.test(normalized) && mentionsToolFields) ||
+    /tool(s)? (is|are)? not (enabled|supported|available)/i.test(normalized) ||
+    /tool[_ ]?calls? (is|are)? not (enabled|supported|available)/i.test(normalized) ||
+    /does not support tool/i.test(normalized) ||
+    /does not support function/i.test(normalized) ||
+    /function calling (is|not)? ?supported/i.test(normalized) ||
+    /tool_choice.*not supported/i.test(normalized) ||
+    /unsupported.*tool/i.test(normalized) ||
+    /unsupported.*function/i.test(normalized) ||
+    /parameter [`'"]?(tools|tool_choice|functions|function_call)[`'"]? is not currently supported/i.test(normalized) ||
+    /unknown parameter ['"`]?(tools|tool_choice|functions|function_call)['"`]?/i.test(normalized) ||
+    ((/extra inputs are not permitted/i.test(normalized) || /extra_forbidden/i.test(normalized)) &&
+      /(tools|tool_choice|functions|function_call)/i.test(normalized)) ||
+    /enable-auto-tool-choice/i.test(normalized) ||
+    /tool-call-parser/i.test(normalized)
+  ) {
+    return "unsupported";
+  }
+
+  return "inconclusive";
+}
+
+function buildToolSupportResult({
+  toolSupport,
+  toolSupportChecked,
+  toolSupportReason,
+  toolSupportSummary = "",
+  rateLimited = false
+}) {
+  return {
+    toolSupport,
+    toolSupportChecked,
+    toolSupportReason,
+    toolSupportSummary,
+    rateLimited
+  };
+}
+
 function getToolSupportProbePayloads(modelId) {
   const basePayload = {
     model: modelId,
@@ -778,22 +1013,15 @@ function getToolSupportProbePayloads(modelId) {
         content: TOOL_SUPPORT_PROMPT
       }
     ],
-    temperature: 0,
-    max_tokens: 64
+    max_tokens: TOOL_SUPPORT_MAX_TOKENS
   };
 
   return [
     {
-      name: "forced-tool-choice",
+      name: "tools-only",
       payload: {
         ...basePayload,
-        tools: [TOOL_SUPPORT_TOOL_SCHEMA],
-        tool_choice: {
-          type: "function",
-          function: {
-            name: TOOL_SUPPORT_FUNCTION_SCHEMA.name
-          }
-        }
+        tools: [TOOL_SUPPORT_TOOL_SCHEMA]
       }
     },
     {
@@ -805,10 +1033,16 @@ function getToolSupportProbePayloads(modelId) {
       }
     },
     {
-      name: "tools-only",
+      name: "forced-tool-choice",
       payload: {
         ...basePayload,
-        tools: [TOOL_SUPPORT_TOOL_SCHEMA]
+        tools: [TOOL_SUPPORT_TOOL_SCHEMA],
+        tool_choice: {
+          type: "function",
+          function: {
+            name: TOOL_SUPPORT_FUNCTION_SCHEMA.name
+          }
+        }
       }
     },
     {
@@ -824,59 +1058,160 @@ function getToolSupportProbePayloads(modelId) {
   ];
 }
 
+function clonePayloadWithMaxTokens(payload, maxTokens) {
+  return {
+    ...payload,
+    max_tokens: maxTokens
+  };
+}
+
+function extractFirstMatchingNumber(text, patterns) {
+  const haystack = String(text || "");
+  for (const pattern of patterns) {
+    const match = haystack.match(pattern);
+    if (!match) {
+      continue;
+    }
+
+    const parsed = parseTokenCount(match[1]);
+    if (parsed) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
 async function probeToolSupport(url, headers, modelId) {
   const attempts = [];
+  let sawAcceptedNoToolCall = false;
+  let sawUnsupported = false;
+  let sawBackendError = false;
+  let sawTimeout = false;
+  let sawInconclusive = false;
+  let sawRateLimited = false;
 
   for (const variant of getToolSupportProbePayloads(modelId)) {
     try {
-      const toolProbe = await postProbeRequest(url, headers, variant.payload, {
+      let toolProbe = await postProbeRequest(url, headers, variant.payload, {
         modelId,
         purpose: `Tool support (${variant.name})`,
         timeoutMs: TOOL_SUPPORT_TIMEOUT_MS
       });
 
+      if (
+        toolProbe.response.ok &&
+        !hasToolCallInResponse(toolProbe.body) &&
+        shouldRetryAcceptedToolProbe(toolProbe.body)
+      ) {
+        attempts.push(
+          `${variant.name}: accepted request but hit length limit; retrying with ${TOOL_SUPPORT_RETRY_MAX_TOKENS} max_tokens`
+        );
+        toolProbe = await postProbeRequest(
+          url,
+          headers,
+          clonePayloadWithMaxTokens(variant.payload, TOOL_SUPPORT_RETRY_MAX_TOKENS),
+          {
+            modelId,
+            purpose: `Tool support retry (${variant.name})`,
+            timeoutMs: TOOL_SUPPORT_TIMEOUT_MS
+          }
+        );
+      }
+
       if (toolProbe.rateLimited) {
-        return {
-          toolSupport: "",
-          toolSupportChecked: false,
-          rateLimited: true
-        };
+        sawRateLimited = true;
+        attempts.push(`${variant.name}: rate limited`);
+        continue;
       }
 
       if (toolProbe.response.ok) {
-        return {
-          toolSupport: hasToolCallInResponse(toolProbe.body),
-          toolSupportChecked: true,
-          rateLimited: false
-        };
+        if (hasToolCallInResponse(toolProbe.body)) {
+          return buildToolSupportResult({
+            toolSupport: true,
+            toolSupportChecked: true,
+            toolSupportReason: "supported"
+          });
+        }
+
+        sawAcceptedNoToolCall = true;
+        attempts.push(`${variant.name}: accepted request but returned no tool call`);
+        continue;
       }
 
       const toolErrorText = getErrorText(toolProbe.body, toolProbe.bodyText);
-      if (isToolSupportExplicitlyUnsupported(toolProbe.response.status, toolErrorText)) {
-        return {
-          toolSupport: false,
-          toolSupportChecked: true,
-          rateLimited: false
-        };
+      const classification = classifyToolSupportError(toolProbe.response.status, toolErrorText);
+
+      if (classification === "unsupported") {
+        sawUnsupported = true;
+        attempts.push(`${variant.name}: unsupported ${summarizeErrorText(toolErrorText, 120)}`);
+        continue;
+      }
+
+      if (classification === "backend_error") {
+        sawBackendError = true;
+      } else {
+        sawInconclusive = true;
       }
 
       attempts.push(
-        `${variant.name}: HTTP ${toolProbe.response.status} ${summarizeErrorText(toolErrorText)}`
+        `${variant.name}: ${classification} ${summarizeErrorText(toolErrorText, 120)}`
       );
     } catch (toolError) {
-      attempts.push(`${variant.name}: ${summarizeErrorText(toolError.message)}`);
+      const classification = classifyToolSupportError(0, toolError.message);
+      if (classification === "timeout") {
+        sawTimeout = true;
+      } else if (classification === "backend_error") {
+        sawBackendError = true;
+      } else {
+        sawInconclusive = true;
+      }
+
+      attempts.push(`${variant.name}: ${classification} ${summarizeErrorText(toolError.message, 120)}`);
     }
   }
 
-  if (attempts.length > 0) {
-    console.warn(`Tool support probe inconclusive for ${modelId}: ${attempts.join(" | ")}`);
+  const summary = attempts.join(" | ");
+
+  if (sawAcceptedNoToolCall && !sawRateLimited && !sawBackendError && !sawTimeout && !sawInconclusive) {
+    return buildToolSupportResult({
+      toolSupport: false,
+      toolSupportChecked: true,
+      toolSupportReason: "no_tool_call_observed",
+      toolSupportSummary: summary
+    });
   }
 
-  return {
+  if (sawUnsupported && !sawRateLimited && !sawBackendError && !sawTimeout && !sawInconclusive) {
+    return buildToolSupportResult({
+      toolSupport: false,
+      toolSupportChecked: true,
+      toolSupportReason: "unsupported",
+      toolSupportSummary: summary
+    });
+  }
+
+  if (sawRateLimited) {
+    return buildToolSupportResult({
+      toolSupport: "",
+      toolSupportChecked: false,
+      toolSupportReason: "rate_limited",
+      toolSupportSummary: summary,
+      rateLimited: true
+    });
+  }
+
+  const reason = sawTimeout ? "timeout" : sawBackendError ? "backend_error" : "inconclusive";
+  if (summary) {
+    console.warn(`Tool support probe ${reason} for ${modelId}: ${summary}`);
+  }
+
+  return buildToolSupportResult({
     toolSupport: "",
     toolSupportChecked: false,
-    rateLimited: false
-  };
+    toolSupportReason: reason,
+    toolSupportSummary: summary
+  });
 }
 
 app.use(express.static(path.join(__dirname, "public")));
@@ -949,14 +1284,18 @@ app.get("/api/test-model", async (req, res) => {
 
   const url = `${API_BASE_URL}/chat/completions`;
   const headers = getRequestHeaders();
+  const metadataTokenHints = getCachedMetadataTokenHints(modelId);
 
   let latencyMs = -1;
   let isAvailable = false;
-  let contextLength = null;
-  let maxOutputTokens = null;
+  let contextLength = metadataTokenHints.contextLength;
+  let maxOutputTokens = metadataTokenHints.maxOutputTokens;
   let toolSupport = "";
   let toolSupportChecked = false;
+  let toolSupportReason = "";
+  let toolSupportSummary = "";
   let rateLimited = false;
+  let unavailableLabel = "Inactive";
 
   try {
     // 1. Test Latency & Availability
@@ -986,52 +1325,101 @@ app.get("/api/test-model", async (req, res) => {
       return res.json(rateLimitedResult);
     }
 
+    if (!isAvailable) {
+      const availabilityErrorText = getErrorText(smallProbe.body, smallProbe.bodyText);
+      const availabilityReason = classifyAvailabilityError(smallProbe.response.status, availabilityErrorText);
+      unavailableLabel = availabilityReason === "unavailable" ? "Inactive" : "Error";
+
+      const unavailableResult = {
+        modelId,
+        latencyMs,
+        isAvailable: false,
+        rateLimited: false,
+        contextLength: unavailableLabel,
+        maxOutputTokens: unavailableLabel,
+        toolSupport: "",
+        toolSupportChecked: false,
+        toolSupportReason: "",
+        toolSupportSummary: "",
+        testedAt: new Date().toLocaleString()
+      };
+
+      if (availabilityReason !== "unavailable") {
+        console.warn(
+          `Availability probe ${availabilityReason} for ${modelId}: ${summarizeErrorText(availabilityErrorText)}`
+        );
+      }
+
+      persistTestResult(modelId, unavailableResult);
+      return res.json(unavailableResult);
+    }
+
     if (isAvailable) {
-      // 2. Test Context Length and Tokens via out of bounds error scraping
-      const limitProbe = await postProbeRequest(
-        url,
-        headers,
-        {
-          model: modelId,
-          messages: [{ role: "user", content: "Hi" }],
-          max_tokens: 99999999
-        },
-        {
-          modelId,
-          purpose: "Limit",
-          timeoutMs: PROBE_TIMEOUT_MS
+      const needsLimitProbe = !(typeof contextLength === "number" && typeof maxOutputTokens === "number");
+
+      if (needsLimitProbe) {
+        // 2. Test Context Length and Tokens via out of bounds error scraping
+        const limitProbe = await postProbeRequest(
+          url,
+          headers,
+          {
+            model: modelId,
+            messages: [{ role: "user", content: "Hi" }],
+            max_tokens: 99999999
+          },
+          {
+            modelId,
+            purpose: "Limit",
+            timeoutMs: PROBE_TIMEOUT_MS
+          }
+        );
+
+        const errorBody = limitProbe.bodyText || "";
+        if (limitProbe.rateLimited) {
+          rateLimited = true;
+          if (contextLength == null) {
+            contextLength = "Rate Limited";
+          }
+          if (maxOutputTokens == null) {
+            maxOutputTokens = "Rate Limited";
+          }
+        } else if (!limitProbe.response.ok && errorBody) {
+          const parsedContextLength = extractFirstMatchingNumber(errorBody, [
+            /context length (?:is|of) (\d+)/i,
+            /maximum context length is (\d+)/i,
+            /supports up to (\d+) input tokens/i,
+            /max_model_len=max_total_tokens=(\d+)/i,
+            /max_model_len=\s*(\d+)/i,
+            /maximum total tokens(?: is| are)? (\d+)/i,
+            /input (?:sequence )?length .*? exceeds .*?(\d+)/i
+          ]);
+          if (parsedContextLength && contextLength == null) {
+            contextLength = parsedContextLength;
+          }
+
+          const parsedMaxOutputTokens = extractFirstMatchingNumber(errorBody, [
+            /generate up to (\d+) tokens/i,
+            /maximum of (\d+) tokens/i,
+            /supports at most (\d+) completion tokens/i,
+            /maximum allowed output length is (\d+)/i,
+            /max_tokens must be at most (\d+)/i,
+            /max_tokens must be between \d+ and (\d+)/i,
+            /output tokens .*? (\d+)/i,
+            /completion tokens .*? (\d+)/i,
+            /less than or equal to (\d+)/i
+          ]);
+          if (parsedMaxOutputTokens && maxOutputTokens == null) {
+            maxOutputTokens = parsedMaxOutputTokens;
+          }
+        } else if (limitProbe.response.ok) {
+          // Model accepted the oversized max_tokens without error - no enforced limit exposed by probing.
+          if (contextLength == null) {
+            contextLength = "No Limit Reported";
+          }
+          if (maxOutputTokens == null) {
+            maxOutputTokens = "No Limit Reported";
+          }
         }
-      );
-
-      const errorBody = limitProbe.bodyText || "";
-      if (limitProbe.rateLimited) {
-        rateLimited = true;
-        contextLength = "Rate Limited";
-        maxOutputTokens = "Rate Limited";
-      } else if (!limitProbe.response.ok && errorBody) {
-        // Common Context length phrases
-        const ctxMatch = errorBody.match(/context length (?:is|of) (\d+)/i) ||
-          errorBody.match(/max_model_len=max_total_tokens=(\d+)/i);
-        if (ctxMatch) contextLength = parseInt(ctxMatch[1], 10);
-
-        // Common token limit phrases
-        const outMatch = errorBody.match(/generate up to (\d+) tokens/i) ||
-          errorBody.match(/maximum of (\d+) tokens/i) ||
-          errorBody.match(/supports at most (\d+) completion tokens/i) ||
-          errorBody.match(/Maximum allowed output length is (\d+)/i) ||
-          errorBody.match(/max_tokens must be at most (\d+)/i) ||
-          errorBody.match(/less than or equal to (\d+)/i) ||
-          errorBody.match(/max_tokens must be between \d+ and (\d+)/i);
-        if (outMatch) maxOutputTokens = parseInt(outMatch[1], 10);
-
-        // If we found a max_model_len which implies the total limit, we can fallback that to context
-        if (!contextLength && errorBody.includes("max_model_len") && errorBody.match(/max_model_len=\s*(\d+)/i)) {
-          contextLength = parseInt(errorBody.match(/max_model_len=\s*(\d+)/i)[1], 10);
-        }
-      } else if (limitProbe.response.ok) {
-        // Model accepted the oversized max_tokens without error - no enforced limit
-        if (!contextLength) contextLength = "No Limit Reported";
-        if (!maxOutputTokens) maxOutputTokens = "No Limit Reported";
       }
 
       // Fallback guess: if we found contextLength but not maxOutput, it's often min(4096, contextLength)
@@ -1049,6 +1437,8 @@ app.get("/api/test-model", async (req, res) => {
         rateLimited = toolProbeResult.rateLimited;
         toolSupport = toolProbeResult.toolSupport;
         toolSupportChecked = toolProbeResult.toolSupportChecked;
+        toolSupportReason = toolProbeResult.toolSupportReason;
+        toolSupportSummary = toolProbeResult.toolSupportSummary;
       }
     }
 
@@ -1063,13 +1453,15 @@ app.get("/api/test-model", async (req, res) => {
       maxOutputTokens: "Error",
       toolSupport: "",
       toolSupportChecked: false,
+      toolSupportReason: "request_error",
+      toolSupportSummary: summarizeErrorText(error.message),
       testedAt: new Date().toLocaleString()
     };
     persistTestResult(modelId, errResult);
     return res.json(errResult);
   }
 
-  const fallbackLabel = isAvailable ? "Unknown" : "Inactive";
+  const fallbackLabel = isAvailable ? "Unknown" : unavailableLabel;
   const result = {
     modelId,
     latencyMs,
@@ -1079,6 +1471,8 @@ app.get("/api/test-model", async (req, res) => {
     maxOutputTokens: maxOutputTokens || fallbackLabel,
     toolSupport,
     toolSupportChecked,
+    toolSupportReason,
+    toolSupportSummary,
     testedAt: new Date().toLocaleString()
   };
 

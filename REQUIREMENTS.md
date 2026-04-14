@@ -38,11 +38,13 @@ Provide a local dashboard for inspecting the free model catalog on `build.nvidia
   - tool calling support
 - `Tool Support` must remain blank until a tool support probe finishes.
 - `429 Too Many Requests` responses must be treated as rate limiting, not as confirmed unsupported-tool results.
+- Tool support detection must classify explicit tool-field validation errors such as unsupported or unknown `tools`, `tool_choice`, `functions`, and `function_call` fields as unsupported-tool results instead of leaving them inconclusive.
+- Tool support detection must retry accepted-but-truncated tool probe responses with a larger completion budget before concluding that tool calling was not observed.
 - Batch testing must support:
   - testing currently displayed rows
   - skipping already complete rows by default
   - forcing a full re-test with `Shift + Click`
-  - a 5 second delay between models
+  - an 8 second delay between models
   - a single retry when numeric token limits are still missing
 
 ### Filters
@@ -55,9 +57,8 @@ Provide a local dashboard for inspecting the free model catalog on `build.nvidia
 - Right-clicking a row must open model-specific usage examples.
 - Provide copyable snippets for:
   - cURL
-  - Python
-  - JavaScript
 - Snippets must reference `NVIDIA_API_KEY`.
+- Do not show a Claude Code command unless the hosted endpoint actually exposes an Anthropic-compatible `/v1/messages` path.
 
 ### Reset And Refresh
 
