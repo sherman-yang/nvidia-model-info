@@ -14,6 +14,8 @@ The app fetches the active model catalog, loads per-model metadata, flattens eve
   - `Ping` re-tests one model.
   - `Test Displayed Models` tests displayed models that do not already have a complete live result.
   - `Shift + Click` on `Test Displayed Models` forces a full re-test of all displayed rows.
+  - Backend probe requests are globally paced and automatically back off on `429 Too Many Requests`.
+  - Tool support probing tries multiple request variants before giving up.
 - Right-click any row to open copyable cURL, Python, and JavaScript API examples for that model.
 - `Force Refresh Data` drops all saved test results, clears backend caches, and reloads the model list from NVIDIA with no cache reuse.
 
@@ -61,6 +63,8 @@ Each live test can perform up to three NVIDIA API requests:
 - `true`: tool calling was observed
 - `false`: tool support probe completed and no tool call support was confirmed
 
+If NVIDIA rate-limits a probe, the row shows `Rate Limited` instead of being cached as a normal failure. Inconclusive tool support probes stay blank so they can be retried later.
+
 ## Configuration
 
 The runtime reads the API key only from `NVIDIA_API_KEY`. It does not use `.env`.
@@ -71,6 +75,12 @@ Optional backend environment variables:
 - `MAX_CONCURRENCY` default `12`
 - `REQUEST_TIMEOUT_MS` default `20000`
 - `CACHE_TTL_MS` default `300000`
+- `PROBE_RATE_LIMIT_RPM` default `36`
+- `PROBE_MIN_INTERVAL_MS` default derived from `PROBE_RATE_LIMIT_RPM`
+- `PROBE_TIMEOUT_MS` default `15000`
+- `TOOL_SUPPORT_TIMEOUT_MS` default `25000`
+- `PROBE_MAX_429_RETRIES` default `2`
+- `PROBE_429_BACKOFF_MS` default `10000`
 
 ## Repository Docs
 
