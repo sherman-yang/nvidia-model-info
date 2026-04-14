@@ -276,8 +276,6 @@ button:hover {
 .models-table td {
   border-right: 1px solid var(--th-border);
   border-bottom: 1px solid var(--th-border);
-  min-width: 240px;
-  max-width: 240px;
   padding: 8px 10px;
   text-align: left;
   vertical-align: top;
