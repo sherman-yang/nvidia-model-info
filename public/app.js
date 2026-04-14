@@ -21,6 +21,18 @@ const usageCopyButtons = document.querySelectorAll("[data-copy-target]");
 
 const CHAT_COMPLETIONS_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
 const BATCH_TEST_DELAY_MS = 8000;
+const DEFAULT_COLUMN_WIDTH = 240;
+const PINNED_COLUMN_COUNT = 4;
+const COLUMN_WIDTHS = {
+  liveTest: 170,
+  modelId: 280,
+  publisher: 160,
+  contextLength: 120,
+  maxOutputTokens: 120,
+  latencyMs: 110,
+  toolSupport: 110,
+  testedAt: 170
+};
 
 const state = {
   loading: false,
@@ -299,6 +311,25 @@ function makeHeaderLabel(columnKey) {
   return columnKey;
 }
 
+function getColumnWidth(columnKey) {
+  return COLUMN_WIDTHS[columnKey] || DEFAULT_COLUMN_WIDTH;
+}
+
+function getPinnedLeftOffset(index) {
+  let offset = 0;
+  for (let i = 0; i < index; i += 1) {
+    offset += getColumnWidth(state.columns[i]);
+  }
+  return offset;
+}
+
+function applyColumnSizing(cell, columnKey) {
+  const width = getColumnWidth(columnKey);
+  cell.style.width = `${width}px`;
+  cell.style.minWidth = `${width}px`;
+  cell.style.maxWidth = `${width}px`;
+}
+
 function formatTokensToK(val) {
   if (typeof val === "number") {
     return Math.round(val / 1024) + "K";
@@ -534,6 +565,7 @@ function renderTableHeader() {
 
   state.columns.forEach((columnKey, index) => {
     const th = document.createElement("th");
+    applyColumnSizing(th, columnKey);
 
     const button = document.createElement("button");
     button.type = "button";
@@ -547,9 +579,9 @@ function renderTableHeader() {
 
     th.appendChild(button);
 
-    if (index <= 2) {
+    if (index < PINNED_COLUMN_COUNT) {
       th.classList.add("pinned");
-      th.style.left = `${index * 240}px`;
+      th.style.left = `${getPinnedLeftOffset(index)}px`;
     }
 
     row.appendChild(th);
@@ -574,6 +606,7 @@ function renderTableBody(rows) {
 
     state.columns.forEach((columnKey, index) => {
       const td = document.createElement("td");
+      applyColumnSizing(td, columnKey);
       const value = row[columnKey];
 
       if (columnKey === "liveTest") {
@@ -606,9 +639,9 @@ function renderTableBody(rows) {
         td.textContent = value === null || value === undefined ? "" : String(value);
       }
 
-      if (index <= 3) {
+      if (index < PINNED_COLUMN_COUNT) {
         td.classList.add("pinned");
-        td.style.left = `${index * 240}px`;
+        td.style.left = `${getPinnedLeftOffset(index)}px`;
       }
 
       tr.appendChild(td);
