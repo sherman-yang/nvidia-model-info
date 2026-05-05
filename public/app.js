@@ -41,6 +41,7 @@ const state = {
   modelCount: 0,
   totalModelCount: 0,
   filteredOutCount: 0,
+  duplicateModelCount: 0,
   apiKeyConfigured: false,
   filterText: "",
   excludeInactive: false,
@@ -736,6 +737,7 @@ function renderStatus(visibleRows) {
   const fetchedAtLabel = state.fetchedAt ? new Date(state.fetchedAt).toLocaleString() : "-";
   const keyLabel = state.apiKeyConfigured ? "Configured" : "Not Configured";
   const totalLabel = state.totalModelCount > 0 ? state.totalModelCount : state.modelCount;
+  const duplicateLabel = state.duplicateModelCount > 0 ? ` | Duplicates Removed: ${state.duplicateModelCount}` : "";
 
   // Calculate dynamic active model count by ONLY counting explicitly successful models
   let dynamicActiveCount = 0;
@@ -750,7 +752,7 @@ function renderStatus(visibleRows) {
   const dynamicallyFilteredCount = Math.max(0, dynamicActiveCount - visibleRows);
 
   setStatus(
-    `Active Models: ${dynamicActiveCount} / Total: ${totalLabel} | Displaying: ${visibleRows} | Filtered: ${dynamicallyFilteredCount} | Sort: ${sortLabel} | API Key: ${keyLabel} | Data from: ${fetchedAtLabel}`
+    `Active Models: ${dynamicActiveCount} / Total: ${totalLabel} | Displaying: ${visibleRows} | Filtered: ${dynamicallyFilteredCount}${duplicateLabel} | Sort: ${sortLabel} | API Key: ${keyLabel} | Data from: ${fetchedAtLabel}`
   );
 }
 
@@ -782,6 +784,7 @@ function clearDisplayedData() {
   state.modelCount = 0;
   state.totalModelCount = 0;
   state.filteredOutCount = 0;
+  state.duplicateModelCount = 0;
   render();
 }
 
@@ -826,6 +829,7 @@ async function loadData(forceRefresh = false) {
     state.modelCount = Number(payload.modelCount || state.rows.length || 0);
     state.totalModelCount = Number(payload.totalModelCount || state.modelCount || 0);
     state.filteredOutCount = Number(payload.filteredOutCount || 0);
+    state.duplicateModelCount = Number(payload.duplicateModelCount || 0);
     state.apiKeyConfigured = Boolean(payload.apiKeyConfigured);
 
     // Reconstruct the visual testState from the loaded string values

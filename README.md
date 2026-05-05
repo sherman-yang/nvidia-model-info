@@ -7,6 +7,7 @@ The app fetches the active model catalog, loads per-model metadata, flattens eve
 ## Highlights
 
 - Shows only models that appear active and usable.
+- Removes duplicate model IDs before metadata loading and rendering.
 - Fetches model metadata for every listed model and renders it as a sortable table.
 - Keeps the most useful columns pinned on the left: `Live Ping`, `Model ID`, `Publisher`, `Context Limit`, `Max Output`, `Latency (ms)`, `Tool Support`, and `Tested At`.
 - Supports global search, `Exclude Inactive/Error`, and `Tool Support` filtering.

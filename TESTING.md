@@ -21,6 +21,7 @@ export NVIDIA_API_KEY="your_actual_key"
 
 - Verify the dashboard loads on `http://localhost:4920` unless `PORT` is overridden.
 - Verify only active and usable models are shown.
+- Verify repeated `Model ID` values are not rendered as duplicate rows.
 - Verify the table contains flattened metadata columns in addition to the pinned columns.
 
 ### Sorting And Filtering
