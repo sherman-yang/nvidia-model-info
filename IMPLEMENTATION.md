@@ -23,17 +23,20 @@ The backend:
 ## Data Loading Flow
 
 1. `GET /api/models-with-metadata` calls NVIDIA `GET /v1/models`.
-2. For each model, the server calls the per-model metadata endpoint.
-3. Metadata is flattened into a single row object.
-4. Active and usable rows are kept.
-5. Cached live test results from `model_limits_cache.json` are merged into the matching rows.
-6. The final response returns:
+2. The raw catalog is de-duplicated by `modelId`.
+3. For each remaining model, the server calls the per-model metadata endpoint.
+4. Metadata is flattened into a single row object.
+5. The row set is de-duplicated again by `modelId` as a protective final pass.
+6. Active and usable rows are kept.
+7. Cached live test results from `model_limits_cache.json` are merged into the matching rows.
+8. The final response returns:
    - `columns`
    - `rows`
    - `fetchedAt`
    - `modelCount`
    - `totalModelCount`
    - `filteredOutCount`
+   - `duplicateModelCount`
    - `apiKeyConfigured`
 
 ## Flattened Row Model

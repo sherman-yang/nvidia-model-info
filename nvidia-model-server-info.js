@@ -296,6 +296,33 @@ async function listAllModels() {
   return payload.data;
 }
 
+function dedupeByModelId(items, keyName) {
+  const uniqueItems = [];
+  const seen = new Set();
+  let duplicateCount = 0;
+
+  for (const item of items) {
+    const modelId = item && typeof item === "object" ? item[keyName] : "";
+    if (typeof modelId !== "string" || !modelId) {
+      uniqueItems.push(item);
+      continue;
+    }
+
+    if (seen.has(modelId)) {
+      duplicateCount += 1;
+      continue;
+    }
+
+    seen.add(modelId);
+    uniqueItems.push(item);
+  }
+
+  return {
+    items: uniqueItems,
+    duplicateCount
+  };
+}
+
 async function getModelMetadata(modelId) {
   const { publisher, modelName } = splitModelId(modelId);
 
@@ -718,7 +745,15 @@ async function loadModelsWithMetadata({ forceRefresh = false } = {}) {
       }
     } catch (e) { }
 
-    const list = await listAllModels();
+    const rawList = await listAllModels();
+    const dedupedListResult = dedupeByModelId(rawList, "id");
+    const list = dedupedListResult.items;
+
+    if (dedupedListResult.duplicateCount > 0) {
+      console.warn(
+        `Removed ${dedupedListResult.duplicateCount} duplicate model entries from /models before metadata loading.`
+      );
+    }
 
     const allRows = await mapWithConcurrency(list, MAX_CONCURRENCY, async (listModel) => {
       try {
@@ -763,13 +798,22 @@ async function loadModelsWithMetadata({ forceRefresh = false } = {}) {
       }
     });
 
-    const rows = allRows.filter((row) => isActiveUsableRow(row));
+    const dedupedRowResult = dedupeByModelId(allRows, "modelId");
+    const rows = dedupedRowResult.items.filter((row) => isActiveUsableRow(row));
+    const duplicateModelCount = dedupedListResult.duplicateCount + dedupedRowResult.duplicateCount;
+
+    if (dedupedRowResult.duplicateCount > 0) {
+      console.warn(
+        `Removed ${dedupedRowResult.duplicateCount} duplicate rows after metadata loading.`
+      );
+    }
 
     const payload = {
       fetchedAt: new Date().toISOString(),
       modelCount: rows.length,
-      totalModelCount: allRows.length,
-      filteredOutCount: allRows.length - rows.length,
+      totalModelCount: dedupedRowResult.items.length,
+      filteredOutCount: dedupedRowResult.items.length - rows.length,
+      duplicateModelCount,
       apiKeyConfigured: Boolean(getApiKey()),
       columns: buildColumns(rows),
       rows
