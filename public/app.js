@@ -25,7 +25,8 @@ const PINNED_COLUMN_COUNT = 4;
 const COLUMN_WIDTHS = {
   liveTest: 170,
   modelId: 280,
-  publisher: 160,
+  publisher: 140,
+  labels: 320,
   contextLength: 120,
   maxOutputTokens: 120,
   latencyMs: 110,
@@ -342,6 +343,7 @@ function makeHeaderLabel(columnKey) {
   if (columnKey === "modelId") return "Model ID";
   if (columnKey === "publisher") return "Publisher";
   if (columnKey === "modelName") return "Model Name";
+  if (columnKey === "labels") return "Labels";
   if (columnKey === "contextLength") return "Context Limit";
   if (columnKey === "maxOutputTokens") return "Max Output";
   if (columnKey === "latencyMs") return "Latency (ms)";
@@ -888,9 +890,88 @@ filterToolSupportChk.addEventListener("change", (event) => {
   render();
 });
 
-refreshBtn.addEventListener("click", () => {
-  loadData(true);
-});
+function showPopulateProgress(state) {
+  batchProgressContainer.hidden = false;
+  batchProgress.max = Math.max(state.total || 1, 1);
+  batchProgress.value = state.completed || 0;
+  const pct = state.total ? Math.round((state.completed / state.total) * 100) : 0;
+  const tail = state.currentLabel ? ` — ${state.currentLabel}` : "";
+  batchStatus.textContent =
+    state.status === "running"
+      ? `Refreshing model cards: ${state.completed}/${state.total} (${pct}%, context found: ${state.contextHits})${tail}`
+      : state.status === "done"
+      ? `Refreshed ${state.total} model cards (context found: ${state.contextHits})`
+      : state.status === "failed"
+      ? `Refresh failed: ${state.error || "unknown error"}`
+      : "";
+}
+
+function hidePopulateProgress() {
+  batchProgressContainer.hidden = true;
+  batchStatus.textContent = "";
+}
+
+// Triggers the populate-specs job and resolves once the server finishes.
+// Caller is responsible for any button/UI state outside the progress bar.
+async function runPopulateWithProgress() {
+  const startResp = await fetch("/api/populate-specs", { method: "POST" });
+  if (!startResp.ok && startResp.status !== 202) {
+    const body = await startResp.text().catch(() => "");
+    throw new Error(`HTTP ${startResp.status}: ${body}`);
+  }
+
+  let lastState = await startResp.json();
+  showPopulateProgress(lastState);
+
+  while (lastState.status === "running") {
+    await new Promise((r) => setTimeout(r, 600));
+    const statusResp = await fetch("/api/populate-specs/status");
+    lastState = await statusResp.json();
+    showPopulateProgress(lastState);
+  }
+
+  if (lastState.status === "failed") {
+    throw new Error(lastState.error || "populate failed");
+  }
+
+  return lastState;
+}
+
+// Force Refresh Data: reset probe cache, reload the model list, then refresh
+// every model card from the catalog. This is the canonical "fetch latest from
+// build.nvidia.com" action — the only way these specs get updated.
+async function forceRefreshAll() {
+  refreshBtn.disabled = true;
+  try {
+    await loadData(true);
+    await runPopulateWithProgress();
+    setTimeout(() => window.location.reload(), 800);
+  } catch (err) {
+    console.error("Force Refresh failed:", err);
+    batchStatus.textContent = `Refresh failed: ${err.message}`;
+    setTimeout(() => {
+      hidePopulateProgress();
+      refreshBtn.disabled = false;
+    }, 5000);
+  }
+}
+
+refreshBtn.addEventListener("click", forceRefreshAll);
+
+// First-load behaviour: if model_specs.json is missing or empty, simulate
+// pressing Force Refresh Data so the user lands on a populated table without
+// having to click anything.
+async function isFirstLoad() {
+  try {
+    const r = await fetch("/api/specs-meta");
+    if (!r.ok) return false;
+    const meta = await r.json();
+    return !meta.exists || meta.entries === 0;
+  } catch (e) {
+    console.warn("Failed to check specs-meta:", e);
+    return false;
+  }
+}
 
 testDisplayedBtn.addEventListener("click", (e) => {
   // If user holds Shift while clicking, force test all elements
@@ -946,4 +1027,11 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-loadData(false);
+(async () => {
+  if (await isFirstLoad()) {
+    setStatus("First-time setup: loading model list and refreshing model cards from build.nvidia.com...");
+    forceRefreshAll();
+  } else {
+    loadData(false);
+  }
+})();

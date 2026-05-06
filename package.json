@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node nvidia-model-server-info.js",
     "dev": "node --watch nvidia-model-server-info.js",
-    "check": "node --check nvidia-model-server-info.js && node --check public/app.js"
+    "check": "node --check nvidia-model-server-info.js && node --check public/app.js",
+    "populate-specs": "node populate_specs.js"
   },
   "keywords": [
     "nvidia",

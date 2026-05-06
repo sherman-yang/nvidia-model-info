@@ -226,6 +226,10 @@ button:hover {
   margin-left: 6px;
 }
 
+.batch-progress-container[hidden] {
+  display: none;
+}
+
 .batch-progress-container progress {
   width: 150px;
   height: 18px;
