@@ -216,5 +216,6 @@ Supported environment variables:
 - `POPULATE_TIMEOUT_MS`
 - `NGC_BASE`
 - `BUILD_ORG`
+- `PROBE_TRACE` — set to `1` to log every NVIDIA probe with timestamp, purpose, and model id; off by default.
 
 `.env` loading is intentionally not used.
