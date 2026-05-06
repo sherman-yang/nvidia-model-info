@@ -516,6 +516,7 @@ function toRow(listModel, metadata) {
     "completion_token_limit"
   ]) || "Not Tested";
 
+  row.labels = ""; // Populated from model_specs.json when available; comma-joined plain tags
   row.liveTest = "Test"; // Placeholder for the frontend button
   row.latencyMs = ""; // Populated by live test
   row.toolSupport = ""; // Populated by live test
@@ -720,6 +721,7 @@ function buildColumns(rows) {
     "liveTest",
     "modelId",
     "publisher",
+    "labels",
     "contextLength",
     "maxOutputTokens",
     "latencyMs",
@@ -798,6 +800,11 @@ async function loadModelsWithMetadata({ forceRefresh = false } = {}) {
         }
         if (spec && typeof spec.maxOutputTokens === "number") {
           row.maxOutputTokens = spec.maxOutputTokens;
+        }
+        if (spec && Array.isArray(spec.labels)) {
+          // Show only plain tags — drop colon-prefixed system labels like
+          // "playgroundType:endpoint:..." and "cloudPartnerType:endpoint:...".
+          row.labels = spec.labels.filter((l) => typeof l === "string" && !l.includes(":")).join(", ");
         }
 
         // Inject cached probe results. Spec values from model_specs.json win over
@@ -1555,6 +1562,130 @@ app.get("/api/test-model", async (req, res) => {
   persistTestResult(modelId, result);
 
   res.json(result);
+});
+
+let populateState = createIdlePopulateState();
+
+function createIdlePopulateState() {
+  return {
+    status: "idle", // idle | running | done | failed
+    total: 0,
+    completed: 0,
+    contextHits: 0,
+    failed: 0,
+    skipped404: 0,
+    startedAt: null,
+    finishedAt: null,
+    error: null,
+    currentLabel: ""
+  };
+}
+
+async function runPopulate() {
+  // Drop any cached version so changes to the file take effect on subsequent runs.
+  delete require.cache[require.resolve("./populate_specs.js")];
+  const mod = require("./populate_specs.js");
+
+  const endpoints = await mod.listEndpoints();
+  populateState.total = endpoints.length;
+
+  const concurrency = Math.max(1, Number(process.env.POPULATE_CONCURRENCY || 6));
+  const items = endpoints.slice();
+  let cursor = 0;
+  const specs = {};
+
+  async function worker() {
+    while (true) {
+      const i = cursor++;
+      if (i >= items.length) return;
+      const ep = items[i];
+      const tag = `${ep.publisher || "?"}/${ep.displayName || ep.name}`;
+      populateState.currentLabel = tag;
+      try {
+        const detail = await mod.fetchEndpointDetail(ep.name);
+        const art = (detail && detail.artifact) || {};
+        const publisher = art.publisher || "unknown";
+        const displayName = art.displayName || ep.displayName || ep.name;
+        const apiId = `${publisher}/${displayName}`;
+        const entry = mod.buildSpecEntry(detail, ep);
+        specs[apiId] = entry;
+        if (entry.contextLength) populateState.contextHits += 1;
+      } catch (e) {
+        if (/HTTP\s+404/.test(e.message)) {
+          populateState.skipped404 += 1;
+        } else {
+          populateState.failed += 1;
+          console.warn(`populate-specs: ${tag} failed: ${e.message.slice(0, 160)}`);
+        }
+      } finally {
+        populateState.completed += 1;
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
+
+  const sortedKeys = Object.keys(specs).sort();
+  const sorted = {};
+  for (const k of sortedKeys) sorted[k] = specs[k];
+  fs.writeFileSync(MODEL_SPECS_FILE, JSON.stringify(sorted, null, 2) + "\n", "utf8");
+
+  // Force the in-memory specs + payload caches to drop so the next list request reloads.
+  modelSpecsCache = null;
+  invalidateCachedPayload();
+}
+
+app.post("/api/populate-specs", (_req, res) => {
+  if (populateState.status === "running") {
+    return res.status(202).json({ ...populateState, message: "already running" });
+  }
+
+  populateState = createIdlePopulateState();
+  populateState.status = "running";
+  populateState.startedAt = new Date().toISOString();
+
+  runPopulate()
+    .then(() => {
+      populateState.status = "done";
+      populateState.finishedAt = new Date().toISOString();
+      populateState.currentLabel = "";
+    })
+    .catch((err) => {
+      console.error("populate-specs failed:", err);
+      populateState.status = "failed";
+      populateState.error = err.message || String(err);
+      populateState.finishedAt = new Date().toISOString();
+      populateState.currentLabel = "";
+    });
+
+  res.status(202).json(populateState);
+});
+
+app.get("/api/populate-specs/status", (_req, res) => {
+  res.json(populateState);
+});
+
+app.get("/api/specs-meta", (_req, res) => {
+  // Lightweight check used by the front-end to decide whether to auto-populate.
+  let exists = false;
+  let entries = 0;
+  let withContext = 0;
+  let lastFetchedAt = null;
+  try {
+    const specs = loadModelSpecs() || {};
+    exists = fs.existsSync(MODEL_SPECS_FILE);
+    for (const [, value] of Object.entries(specs)) {
+      if (!value || typeof value !== "object") continue;
+      entries += 1;
+      if (typeof value.contextLength === "number") withContext += 1;
+      if (typeof value._fetchedAt === "string" && (!lastFetchedAt || value._fetchedAt > lastFetchedAt)) {
+        lastFetchedAt = value._fetchedAt;
+      }
+    }
+  } catch (e) {
+    // ignore — frontend interprets as "no specs"
+  }
+  res.json({ exists, entries, withContext, lastFetchedAt });
 });
 
 app.listen(PORT, () => {
