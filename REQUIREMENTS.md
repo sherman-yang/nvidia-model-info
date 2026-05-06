@@ -12,6 +12,7 @@ Provide a local dashboard for inspecting the free model catalog on `build.nvidia
 - Fetch metadata for every listed model through the model metadata endpoint.
 - Show only models that appear active and usable.
 - Flatten metadata into table columns so every available metadata field can be viewed and sorted.
+- Source `Context Limit`, `Max Output`, and `Labels` from publisher-stated values on `build.nvidia.com` (pulled via the public NGC catalog API into `model_specs.json`). The probe path must not overwrite spec-supplied values.
 
 ### Table Behavior
 
@@ -21,11 +22,13 @@ Provide a local dashboard for inspecting the free model catalog on `build.nvidia
   - `Live Ping`
   - `Model ID`
   - `Publisher`
+  - `Labels`
   - `Context Limit`
   - `Max Output`
   - `Latency (ms)`
   - `Tool Support`
   - `Tested At`
+- The `Labels` column must show only plain capability tags (system labels containing `:` are not displayed). Sorting and global search must apply to it.
 
 ### Live Probing
 
@@ -33,9 +36,9 @@ Provide a local dashboard for inspecting the free model catalog on `build.nvidia
 - A live probe must attempt to determine:
   - availability
   - latency
-  - context length
-  - max output tokens
+  - max output tokens (only when the spec did not already provide a value)
   - tool calling support
+- `Context Limit` must not be probed live. It comes from `model_specs.json` only.
 - `Tool Support` must remain blank until a tool support probe finishes.
 - `429 Too Many Requests` responses must be treated as rate limiting, not as confirmed unsupported-tool results.
 - Tool support detection must classify explicit tool-field validation errors such as unsupported or unknown `tools`, `tool_choice`, `functions`, and `function_call` fields as unsupported-tool results instead of leaving them inconclusive.
@@ -68,6 +71,12 @@ Provide a local dashboard for inspecting the free model catalog on `build.nvidia
   - delete saved live test results
   - reset backend caches
   - fetch a fresh model list and metadata snapshot from NVIDIA
+  - re-pull every endpoint's model card from build.nvidia.com and rewrite `model_specs.json`
+  - show progress while the populate runs and reload the page when done
+
+- On first load, when `model_specs.json` has no entries, the dashboard must automatically execute the same flow as `Force Refresh Data` so the user lands on a populated table without manual interaction.
+
+- The same model-card populate must also be runnable from the CLI as `npm run populate-specs` (or `node populate_specs.js`).
 
 ## Technical Requirements
 

@@ -2,14 +2,15 @@
 
 Local dashboard for exploring the free models exposed through `build.nvidia.com`.
 
-The app fetches the active model catalog, loads per-model metadata, flattens every metadata field into sortable table columns, and lets you probe live capabilities such as latency, context length, max output tokens, and tool calling support.
+The app fetches the active model catalog, pulls each endpoint's model card from the public NGC catalog API to populate `Context Limit` and `Labels`, flattens every metadata field into sortable table columns, and lets you probe live capabilities such as latency, max output tokens, and tool calling support.
 
 ## Highlights
 
 - Shows only models that appear active and usable.
 - Removes duplicate model IDs before metadata loading and rendering.
 - Fetches model metadata for every listed model and renders it as a sortable table.
-- Keeps the most useful columns pinned on the left: `Live Ping`, `Model ID`, `Publisher`, `Context Limit`, `Max Output`, `Latency (ms)`, `Tool Support`, and `Tested At`.
+- Keeps the most useful columns pinned on the left: `Live Ping`, `Model ID`, `Publisher`, `Labels`, `Context Limit`, `Max Output`, `Latency (ms)`, `Tool Support`, and `Tested At`.
+- `Context Limit` and `Labels` are read from `model_specs.json`, populated from `build.nvidia.com` model cards via the public NGC catalog API. See [docs/MODEL_CARD_FETCH.md](docs/MODEL_CARD_FETCH.md).
 - Supports global search, `Exclude Inactive/Error`, and `Tool Support` filtering.
 - Probes live model behavior from the UI:
   - `Ping` re-tests one model.
@@ -18,7 +19,8 @@ The app fetches the active model catalog, loads per-model metadata, flattens eve
   - Backend probe requests are globally paced and automatically back off on `429 Too Many Requests`.
   - Tool support probing tries multiple request variants, classifies explicit unsupported-tool responses, and retries accepted-but-truncated responses with a larger completion budget before giving up.
 - Right-click any row to open a copyable cURL API example for that model.
-- `Force Refresh Data` drops all saved test results, clears backend caches, and reloads the model list from NVIDIA with no cache reuse.
+- On first load, when `model_specs.json` is empty, the dashboard automatically runs `Force Refresh Data` so the user lands on a fully populated table.
+- `Force Refresh Data` drops all saved test results, clears backend caches, reloads the model list from NVIDIA, and re-pulls every model card from `build.nvidia.com`.
 
 ## Quick Start
 
@@ -48,14 +50,14 @@ export NVIDIA_API_KEY="your_nvidia_api_key"
 | Test Displayed Models | Tests displayed models that are still missing a complete live test result. |
 | Shift + Click on Test Displayed Models | Forces a re-test of every displayed row. |
 | Stop Testing | Cancels the running batch test. |
-| Force Refresh Data | Clears all saved test data and backend cache, then fetches a fresh model list and metadata snapshot. |
+| Force Refresh Data | Clears all saved test data and backend cache, fetches a fresh model list, and re-pulls every model card from `build.nvidia.com`. Reloads the page when done. |
 
 ## What The Live Test Actually Detects
 
 Each live test can perform up to three NVIDIA API requests:
 
 1. A small chat completion request to confirm availability and measure latency.
-2. Metadata-aware token limit detection that prefers numeric metadata hints and falls back to an oversized `max_tokens` probe only when a live value is still missing.
+2. An oversized `max_tokens` probe to detect the output-token limit. Skipped when `model_specs.json` already provides `maxOutputTokens` for this model. `Context Limit` is never probed live — it always comes from `model_specs.json`.
 3. An adaptive tool-calling probe that tries multiple compatible request shapes and can retry truncated accepted responses with a larger `max_tokens` value.
 
 `Tool Support` is intentionally three-state:
@@ -84,6 +86,16 @@ Optional backend environment variables:
 - `TOOL_SUPPORT_TIMEOUT_MS` default `25000`
 - `PROBE_MAX_429_RETRIES` default `2`
 - `PROBE_429_BACKOFF_MS` default `10000`
+- `POPULATE_CONCURRENCY` default `6` — concurrent model-card fetches during populate
+- `POPULATE_TIMEOUT_MS` default `20000` — per-request timeout for populate fetches
+- `NGC_BASE` default `https://api.ngc.nvidia.com/v2` — base URL for the NGC catalog API
+- `BUILD_ORG` default `qc69jvmznzxy` — orgName for the build.nvidia.com tenant
+
+## CLI
+
+- `npm start` — launch the dashboard server.
+- `npm run check` — syntax-check the server and frontend JavaScript.
+- `npm run populate-specs` — re-pull every model card from build.nvidia.com and rewrite `model_specs.json`. Same effect as the in-app `Force Refresh Data`, useful in CI / cron / one-off workflows.
 
 ## Repository Docs
 
@@ -91,3 +103,4 @@ Optional backend environment variables:
 - [REQUIREMENTS.md](REQUIREMENTS.md)
 - [IMPLEMENTATION.md](IMPLEMENTATION.md)
 - [TESTING.md](TESTING.md)
+- [docs/MODEL_CARD_FETCH.md](docs/MODEL_CARD_FETCH.md)
