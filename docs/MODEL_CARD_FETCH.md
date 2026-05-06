@@ -132,7 +132,7 @@ Source: `artifact.description` (markdown). We extract:
 | `releaseDate`     | "build.nvidia.com:** April 23, 2026"                  | ISO 8601 (`YYYY-MM-DD`) |
 | `license`         | "Additional Information: [MIT]"                       | Author license, not NVIDIA terms-of-service |
 | `huggingfaceUrl`  | First `https://huggingface.co/...` link in body       | Empty for NVIDIA-developed models |
-| `useCase`         | First sentence after `## Use Case`                    | Not surfaced as a column today |
+| `useCase`         | First sentence after `## Use Case`                    | Shown in the right-click popover. Hidden from the table column set via `hiddenFields`. |
 | `labels`          | API field `artifact.labels` (raw, kept verbatim)      | The server filters `:` out for the table column |
 | `preview`         | `attributes.PREVIEW === "true"`                      | Boolean |
 | `available`       | `attributes.AVAILABLE === "false"` → `false`          | Set only when explicitly false |

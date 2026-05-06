@@ -89,11 +89,14 @@ export NVIDIA_API_KEY="your_actual_key"
 
 ### Usage Popover
 
-- Right-click a row.
-- Verify the popover opens with only a cURL snippet.
-- Verify the snippet references `NVIDIA_API_KEY`.
-- Verify the note explains that the hosted endpoint does not currently expose `/v1/messages`.
-- Verify the copy button places the expected cURL text on the clipboard.
+- Right-click a row that has a `Use case` populated in `model_specs.json` (for example `deepseek-ai/deepseek-v4-flash`).
+- Verify the popover shows:
+  - "Model card: https://build.nvidia.com/&lt;publisher&gt;/&lt;model&gt;/modelcard" rendered as a clickable link that opens in a new tab.
+  - "Use case: ..." with the publisher's stated use-case sentence.
+  - The cURL block referencing `$NVIDIA_API_KEY`.
+- Right-click a row whose spec has no `useCase` (for example `adept/fuyu-8b`).
+- Verify the use-case line is hidden entirely (no empty-row gap).
+- Verify the copy button places the cURL text on the clipboard.
 
 ## Static Verification
 

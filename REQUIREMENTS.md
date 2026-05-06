@@ -57,11 +57,11 @@ Provide a local dashboard for inspecting the free model catalog on `build.nvidia
 
 ### Usage Examples
 
-- Right-clicking a row must open model-specific usage examples.
-- Provide copyable snippets for:
-  - cURL
-- Snippets must reference `NVIDIA_API_KEY`.
-- Do not show a Claude Code command unless the hosted endpoint actually exposes an Anthropic-compatible `/v1/messages` path.
+- Right-clicking a row must open a popover with:
+  - a clickable link to that model's `build.nvidia.com` model card,
+  - the publisher-stated use case (hidden when not provided in `model_specs.json`),
+  - a copyable cURL snippet that references `NVIDIA_API_KEY` and targets `https://integrate.api.nvidia.com/v1/chat/completions`.
+- The popover must not include an Anthropic-compatible `/v1/messages` snippet — that path is not exposed by the hosted endpoint.
 
 ### Reset And Refresh
 
