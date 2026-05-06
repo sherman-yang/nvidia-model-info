@@ -164,8 +164,8 @@ The frontend:
   - numeric `maxOutputTokens`
   - `toolSupportChecked === true`
 - `Shift + Click` forces re-testing of every displayed row.
-- The batch runner waits 8 seconds between models.
-- If a row still lacks numeric token limits after a run, or the row is marked `Rate Limited`, it retries once after another 8 seconds.
+- The batch runner does not insert any artificial delay between models — pacing is handled by the backend's global probe rate limiter (`PROBE_RATE_LIMIT_RPM`, default 40 RPM = 1500 ms minimum gap between any two outgoing NVIDIA requests).
+- If a row still lacks numeric token limits after a run, or the row is marked `Rate Limited`, it is retried once back-to-back. The rate limiter ensures the retry's first probe also waits its turn.
 
 ### Tool Support Display
 

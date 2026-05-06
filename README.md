@@ -80,8 +80,8 @@ Optional backend environment variables:
 - `MAX_CONCURRENCY` default `12`
 - `REQUEST_TIMEOUT_MS` default `20000`
 - `CACHE_TTL_MS` default `300000`
-- `PROBE_RATE_LIMIT_RPM` default `36`
-- `PROBE_MIN_INTERVAL_MS` default derived from `PROBE_RATE_LIMIT_RPM`
+- `PROBE_RATE_LIMIT_RPM` default `40` — the only knob that controls the rate of NVIDIA probes. `60000 / value` is the minimum gap between any two outgoing requests. NVIDIA's free-tier cap is 40 RPM; matching it gives full throughput. Lower it if you start seeing 429s.
+- `PROBE_MIN_INTERVAL_MS` default derived from `PROBE_RATE_LIMIT_RPM` (= `1500ms` at 40 RPM)
 - `PROBE_TIMEOUT_MS` default `15000`
 - `TOOL_SUPPORT_TIMEOUT_MS` default `25000`
 - `PROBE_MAX_429_RETRIES` default `2`

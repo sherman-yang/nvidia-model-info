@@ -19,7 +19,6 @@ const usageCloseBtn = document.getElementById("usage-close-btn");
 const usageCopyButtons = document.querySelectorAll("[data-copy-target]");
 
 const CHAT_COMPLETIONS_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
-const BATCH_TEST_DELAY_MS = 8000;
 const DEFAULT_COLUMN_WIDTH = 240;
 const PINNED_COLUMN_COUNT = 4;
 const COLUMN_WIDTHS = {
@@ -70,14 +69,13 @@ function isRateLimitedRow(row) {
   );
 }
 
-function waitWithAbort(signal, delayMs) {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(resolve, delayMs);
-    signal.addEventListener("abort", () => {
-      clearTimeout(timeout);
-      reject(new Error("Aborted"));
-    });
-  });
+function applyApiKeyGating() {
+  // Buttons that hit /v1/chat/completions need the key. Force Refresh Data
+  // does not (NGC catalog API is unauthenticated), so leave it alone.
+  const disabled = !state.apiKeyConfigured;
+  const why = "Set NVIDIA_API_KEY to enable live probing";
+  testDisplayedBtn.disabled = disabled;
+  testDisplayedBtn.title = disabled ? why : "Click to test unknown models. Hold Shift + Click to force re-test ALL models.";
 }
 
 function setStatus(text) {
@@ -187,16 +185,6 @@ function buildUsageSnippets(row) {
   const modelId =
     row.modelId || (row.publisher && row.modelName ? `${row.publisher}/${row.modelName}` : "unknown-model");
 
-  const contextLengthValue = findValueByKeyCandidates(row, [
-    "context_length",
-    "contextlength",
-    "context_window",
-    "contextwindow",
-    "max_input_tokens",
-    "maxinputtokens",
-    "input_token_limit"
-  ]);
-
   const maxOutputTokensValue = findValueByKeyCandidates(row, [
     "max_output_tokens",
     "maxoutputtokens",
@@ -204,11 +192,8 @@ function buildUsageSnippets(row) {
     "max_tokens",
     "completion_token_limit"
   ]);
-
   const parsedMaxOutputTokens = parseTokenCount(maxOutputTokensValue);
   const maxTokens = parsedMaxOutputTokens ? Math.min(parsedMaxOutputTokens, 512) : 512;
-  const contextLengthText = contextLengthValue !== null ? String(contextLengthValue) : "Unknown";
-  const maxOutputText = maxOutputTokensValue !== null ? String(maxOutputTokensValue) : "Unknown";
 
   const payload = {
     model: modelId,
@@ -224,12 +209,14 @@ function buildUsageSnippets(row) {
   -H "Content-Type: application/json" \\
   -d '${curlPayloadForShell}'`;
 
+  // build.nvidia.com URL slug uses the same form as our /v1/models id
+  // (publisher/displayName, dots preserved). Link straight to the Model Card tab.
+  const modelCardUrl = `https://build.nvidia.com/${modelId}/modelcard`;
+
   return {
     modelId,
-    contextLengthText,
-    maxOutputText,
-    note:
-      "Claude Code command is not shown because the hosted integrate.api.nvidia.com endpoint currently returns 404 for /v1/messages. Keep using the cURL example for this hosted API.",
+    modelCardUrl,
+    useCase: typeof row.useCase === "string" ? row.useCase : "",
     snippets: {
       curl
     }
@@ -249,8 +236,27 @@ function showUsagePopover(row, clientX, clientY) {
 
   usageTitle.textContent = "Model Usage Examples";
   usageSubtitle.textContent = `Model: ${usage.modelId}`;
-  usageMeta.textContent = `context_length: ${usage.contextLengthText} | max_output_tokens: ${usage.maxOutputText} | API Key Env Var: NVIDIA_API_KEY`;
-  usageNote.textContent = usage.note;
+
+  // Replace the old context/max-output meta line with a clickable link to the
+  // model card on build.nvidia.com.
+  usageMeta.replaceChildren();
+  usageMeta.append("Model card: ");
+  const cardLink = document.createElement("a");
+  cardLink.href = usage.modelCardUrl;
+  cardLink.textContent = usage.modelCardUrl;
+  cardLink.target = "_blank";
+  cardLink.rel = "noopener noreferrer";
+  usageMeta.append(cardLink);
+
+  // useCase (publisher's stated use case) — show only when populated.
+  if (usage.useCase) {
+    usageNote.textContent = `Use case: ${usage.useCase}`;
+    usageNote.hidden = false;
+  } else {
+    usageNote.textContent = "";
+    usageNote.hidden = true;
+  }
+
   usageCurl.textContent = usage.snippets.curl;
 
   usagePopover.hidden = false;
@@ -578,51 +584,30 @@ async function runBatchTest(force = false) {
 
     count++;
     batchProgress.value = count;
-    batchStatus.textContent = `Batch testing ${force ? '(Forced) ' : ''}${count}/${visibleRows.length}: ${row.modelId}... (${Math.round(BATCH_TEST_DELAY_MS / 1000)}s delay to avoid rate limits)`;
+    batchStatus.textContent = `Batch testing ${force ? '(Forced) ' : ''}${count}/${visibleRows.length}: ${row.modelId}...`;
 
     const tr = document.querySelector(`tr[data-model-id="${row.modelId}"]`);
     const btn = tr ? tr.querySelector('.live-test-btn') : null;
 
     await runLiveTest(row, btn);
 
-    // Check if we need to retry — no numeric limits found
+    // Retry once if we hit the rate-limited path or if no numeric limits came
+    // back. No artificial wait — the backend's global probe rate limiter
+    // (PROBE_RATE_LIMIT_RPM, defaults to NVIDIA's 40 RPM cap) automatically
+    // paces every outgoing request.
     const gotNumericCtx = typeof row.contextLength === "number";
     const gotNumericOut = typeof row.maxOutputTokens === "number";
     const needsRetry = (!gotNumericCtx && !gotNumericOut) || isRateLimitedRow(row);
 
     if (needsRetry && !signal.aborted) {
-      // Update batchStatus text — this element is NEVER destroyed by render()
-      batchStatus.textContent = `⟳ Retrying ${count}/${visibleRows.length}: ${row.modelId}... (waiting ${Math.round(BATCH_TEST_DELAY_MS / 1000)}s)`;
-
-      // Re-query button from fresh DOM (render() rebuilt the table)
-      const freshBtn = document.querySelector(`tr[data-model-id="${row.modelId}"] .live-test-btn`);
-      if (freshBtn) {
-        freshBtn.textContent = "Retrying...";
-        freshBtn.classList.add("retry");
-        freshBtn.disabled = false;
+      batchStatus.textContent = `⟳ Retrying ${count}/${visibleRows.length}: ${row.modelId}...`;
+      const retryBtn = document.querySelector(`tr[data-model-id="${row.modelId}"] .live-test-btn`);
+      if (retryBtn) {
+        retryBtn.textContent = "Retrying...";
+        retryBtn.classList.add("retry");
+        retryBtn.disabled = false;
       }
-
-      // Wait before retry
-      try {
-        await waitWithAbort(signal, BATCH_TEST_DELAY_MS);
-      } catch (e) {
-        break; // aborted
-      }
-
-      if (!signal.aborted) {
-        // Re-query again since we just waited
-        const retryBtn = document.querySelector(`tr[data-model-id="${row.modelId}"] .live-test-btn`);
-        await runLiveTest(row, retryBtn, true);
-      }
-    }
-
-    // Wait before the next model-level test to stay below the free-tier rate cap.
-    if (count < visibleRows.length && !signal.aborted) {
-      try {
-        await waitWithAbort(signal, BATCH_TEST_DELAY_MS);
-      } catch (e) {
-        break; // aborted
-      }
+      await runLiveTest(row, retryBtn, true);
     }
   }
 
@@ -701,6 +686,10 @@ function renderTableBody(rows) {
         btn.className = "live-test-btn";
         btn.style.fontSize = hasResult ? "11px" : "";
         btn.style.padding = hasResult ? "2px 6px" : "";
+        if (!state.apiKeyConfigured) {
+          btn.disabled = true;
+          btn.title = "Set NVIDIA_API_KEY to enable live probing";
+        }
         btn.onclick = (e) => {
           e.stopPropagation();
           runLiveTest(row, btn);
@@ -831,6 +820,7 @@ async function loadData(forceRefresh = false) {
 
     const banner = document.getElementById("api-key-banner");
     if (banner) banner.hidden = state.apiKeyConfigured;
+    applyApiKeyGating();
 
     // Reconstruct the visual testState from the loaded string values
     state.rows.forEach(row => {

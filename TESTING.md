@@ -60,8 +60,8 @@ export NVIDIA_API_KEY="your_actual_key"
 - Click `Test Displayed Models`.
 - Verify rows that are missing a complete live result are tested sequentially.
 - Verify the progress area appears and the button changes to `Stop Testing`.
-- Verify the runner waits about 8 seconds between models.
-- Verify a row with missing numeric token limits gets retried once after another 8 second wait.
+- Run with `PROBE_TRACE=1` and verify every consecutive `[probe-trace ...]` log line is at least `60000 / PROBE_RATE_LIMIT_RPM` ms apart (= 1500 ms at the default 40 RPM). This is the only rate-limit mechanism — there is no per-model delay layered on top.
+- Verify a row with missing numeric token limits gets retried once back-to-back (no extra wait, the rate limiter handles spacing).
 - If NVIDIA returns `429`, verify the row shows `Rate Limited` and remains eligible for retry instead of being treated as a confirmed unsupported result.
 - If a model accepts a tool request but stops with `finish_reason="length"` before returning a tool call, verify the backend retries that variant with a larger `max_tokens` budget before concluding `false`.
 - Click `Stop Testing` and verify the batch run stops.

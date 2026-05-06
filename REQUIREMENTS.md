@@ -47,8 +47,8 @@ Provide a local dashboard for inspecting the free model catalog on `build.nvidia
   - testing currently displayed rows
   - skipping already complete rows by default
   - forcing a full re-test with `Shift + Click`
-  - an 8 second delay between models
-  - a single retry when numeric token limits are still missing
+  - no artificial delay between models — pacing must come from a single global rate limiter at `PROBE_RATE_LIMIT_RPM` (defaulting to NVIDIA's free-tier 40 RPM cap), enforced before every outgoing NVIDIA call
+  - a single retry when numeric token limits are still missing or the model comes back rate-limited
 
 ### Filters
 

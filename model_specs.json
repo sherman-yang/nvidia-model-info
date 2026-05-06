@@ -12,7 +12,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.770Z",
+    "_fetchedAt": "2026-05-06T05:22:08.826Z",
     "_ngcSlug": "dracarys-llama-3_1-70b-instruct"
   },
   "ansys/fluent": {
@@ -28,7 +28,7 @@
     ],
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:35.162Z",
+    "_fetchedAt": "2026-05-06T05:22:07.276Z",
     "_ngcSlug": "fluent"
   },
   "arc/evo2-40b": {
@@ -47,7 +47,7 @@
       "usecase:endpoint:usecase_drug_discovery"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.637Z",
+    "_fetchedAt": "2026-05-06T05:22:07.424Z",
     "_ngcSlug": "evo2-40b"
   },
   "baai/bge-m3": {
@@ -58,6 +58,7 @@
     "labels": [
       "Embeddings",
       "Retrieval Augmented Generation",
+      "cloudPartnerType:endpoint:cloud_partner_type_bitdeer",
       "cloudPartnerType:endpoint:cloud_partner_type_deepinfra",
       "nimType:endpoint:nim_type_run_anywhere",
       "nimType:endpoint:nim_type_upgrade_available",
@@ -65,7 +66,7 @@
       "usecase:endpoint:usecase_text_to_embedding"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.733Z",
+    "_fetchedAt": "2026-05-06T05:22:07.182Z",
     "_ngcSlug": "bge-m3"
   },
   "baidu/paddleocr": {
@@ -82,7 +83,7 @@
       "run-on-rtx"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:32.762Z",
+    "_fetchedAt": "2026-05-06T05:22:09.064Z",
     "_ngcSlug": "paddleocr"
   },
   "black-forest-labs/FLUX.1-Kontext-dev": {
@@ -108,7 +109,7 @@
       "usecase:endpoint:usecase_text_to_image"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:32.584Z",
+    "_fetchedAt": "2026-05-06T05:22:09.600Z",
     "_ngcSlug": "flux_1-kontext-dev"
   },
   "black-forest-labs/FLUX.1-dev": {
@@ -134,7 +135,7 @@
       "usecase:endpoint:usecase_text_to_image"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:32.985Z",
+    "_fetchedAt": "2026-05-06T05:22:09.689Z",
     "_ngcSlug": "flux_1-dev"
   },
   "black-forest-labs/FLUX.1-schnell": {
@@ -161,7 +162,7 @@
       "usecase:endpoint:usecase_text_to_image"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.745Z",
+    "_fetchedAt": "2026-05-06T05:22:09.510Z",
     "_ngcSlug": "flux_1-schnell"
   },
   "black-forest-labs/flux.2-klein-4b": {
@@ -181,7 +182,7 @@
       "usecase:endpoint:usecase_text_to_image"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:32.883Z",
+    "_fetchedAt": "2026-05-06T05:22:08.385Z",
     "_ngcSlug": "flux_2-klein-4b"
   },
   "bytedance/seed-oss-36b-instruct": {
@@ -209,7 +210,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.657Z",
+    "_fetchedAt": "2026-05-06T05:22:09.103Z",
     "_ngcSlug": "seed-oss-36b-instruct"
   },
   "cadence/fidelity": {
@@ -225,7 +226,7 @@
     ],
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:35.166Z",
+    "_fetchedAt": "2026-05-06T05:22:07.341Z",
     "_ngcSlug": "fidelity"
   },
   "cadence/spectre-x": {
@@ -242,7 +243,7 @@
     ],
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:35.318Z",
+    "_fetchedAt": "2026-05-06T05:22:07.275Z",
     "_ngcSlug": "spectre-x"
   },
   "colabfold/msa-search": {
@@ -259,7 +260,7 @@
       "usecase:endpoint:usecase_drug_discovery"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.236Z",
+    "_fetchedAt": "2026-05-06T05:22:08.744Z",
     "_ngcSlug": "msa-search"
   },
   "deepmind/alphafold2": {
@@ -275,7 +276,7 @@
       "usecase:endpoint:usecase_drug_discovery"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:35.344Z",
+    "_fetchedAt": "2026-05-06T05:22:08.733Z",
     "_ngcSlug": "alphafold2"
   },
   "deepmind/alphafold2-multimer": {
@@ -291,7 +292,7 @@
       "usecase:endpoint:usecase_drug_discovery"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:35.062Z",
+    "_fetchedAt": "2026-05-06T05:22:07.198Z",
     "_ngcSlug": "alphafold2-multimer"
   },
   "deepseek-ai/deepseek-v4-flash": {
@@ -323,7 +324,7 @@
       "playgroundType:endpoint:playgroundtype_chat"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:32.892Z",
+    "_fetchedAt": "2026-05-06T05:22:08.840Z",
     "_ngcSlug": "deepseek-v4-flash"
   },
   "deepseek-ai/deepseek-v4-pro": {
@@ -358,7 +359,7 @@
       "reasoning"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.009Z",
+    "_fetchedAt": "2026-05-06T05:22:07.929Z",
     "_ngcSlug": "deepseek-v4-pro"
   },
   "google/gemma-2-2b-it": {
@@ -378,7 +379,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.348Z",
+    "_fetchedAt": "2026-05-06T05:22:08.653Z",
     "_ngcSlug": "gemma-2-2b-it"
   },
   "google/gemma-3-27b-it": {
@@ -403,7 +404,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.436Z",
+    "_fetchedAt": "2026-05-06T05:22:09.148Z",
     "_ngcSlug": "gemma-3-27b-it"
   },
   "google/gemma-3n-e2b-it": {
@@ -425,7 +426,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:32.668Z",
+    "_fetchedAt": "2026-05-06T05:22:07.703Z",
     "_ngcSlug": "gemma-3n-e2b-it"
   },
   "google/gemma-3n-e4b-it": {
@@ -450,7 +451,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.554Z",
+    "_fetchedAt": "2026-05-06T05:22:09.288Z",
     "_ngcSlug": "gemma-3n-e4b-it"
   },
   "google/gemma-4-31b-it": {
@@ -486,7 +487,7 @@
       "text-to-text"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.979Z",
+    "_fetchedAt": "2026-05-06T05:22:09.792Z",
     "_ngcSlug": "gemma-4-31b-it"
   },
   "google/paligemma": {
@@ -509,7 +510,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.845Z",
+    "_fetchedAt": "2026-05-06T05:22:08.924Z",
     "_ngcSlug": "google-paligemma"
   },
   "ipd/proteinmpnn": {
@@ -528,7 +529,7 @@
       "usecase:endpoint:usecase_drug_discovery"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:35.019Z",
+    "_fetchedAt": "2026-05-06T05:22:09.017Z",
     "_ngcSlug": "proteinmpnn"
   },
   "ipd/rfdiffusion": {
@@ -546,7 +547,7 @@
       "usecase:endpoint:usecase_drug_discovery"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.246Z",
+    "_fetchedAt": "2026-05-06T05:22:08.768Z",
     "_ngcSlug": "rfdiffusion"
   },
   "meta/esm2-650m": {
@@ -564,7 +565,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.330Z",
+    "_fetchedAt": "2026-05-06T05:22:08.568Z",
     "_ngcSlug": "esm2-650m"
   },
   "meta/esmfold": {
@@ -582,7 +583,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.169Z",
+    "_fetchedAt": "2026-05-06T05:22:09.603Z",
     "_ngcSlug": "esmfold"
   },
   "meta/llama-3.1-70b-instruct": {
@@ -604,7 +605,7 @@
       "usecase:endpoint:usecase_text_gen"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.655Z",
+    "_fetchedAt": "2026-05-06T05:22:09.726Z",
     "_ngcSlug": "llama-3_1-70b-instruct"
   },
   "meta/llama-3.1-8b-instruct": {
@@ -618,6 +619,7 @@
       "Run-on-RTX",
       "Text-to-Text",
       "cloudPartnerType:endpoint:cloud_partner_type_gmicloud",
+      "cloudPartnerType:endpoint:cloud_partner_type_together",
       "cloudPartnerType:endpoint:cloud_partner_type_wandb",
       "nimType:endpoint:nim_type_run_anywhere",
       "nimType:endpoint:nim_type_upgrade_available",
@@ -626,7 +628,7 @@
       "usecase:endpoint:usecase_text_gen"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.982Z",
+    "_fetchedAt": "2026-05-06T05:22:07.185Z",
     "_ngcSlug": "llama-3_1-8b-instruct"
   },
   "meta/llama-3.2-11b-vision-instruct": {
@@ -639,8 +641,8 @@
       "Image-Text Retrieval",
       "Visual Grounding",
       "Visual QA",
+      "cloudPartnerType:endpoint:cloud_partner_type_bitdeer",
       "cloudPartnerType:endpoint:cloud_partner_type_deepinfra",
-      "cloudPartnerType:endpoint:cloud_partner_type_together",
       "nimType:endpoint:nim_type_run_anywhere",
       "nimType:endpoint:nim_type_upgrade_available",
       "playgroundType:endpoint:playgroundtype_chat",
@@ -648,7 +650,7 @@
       "usecase:endpoint:usecase_text_gen"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.554Z",
+    "_fetchedAt": "2026-05-06T05:22:07.109Z",
     "_ngcSlug": "llama-3.2-11b-vision-instruct"
   },
   "meta/llama-3.2-1b-instruct": {
@@ -669,7 +671,7 @@
       "usecase:endpoint:usecase_text_gen"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.860Z",
+    "_fetchedAt": "2026-05-06T05:22:08.933Z",
     "_ngcSlug": "llama-3.2-1b-instruct"
   },
   "meta/llama-3.2-3b-instruct": {
@@ -689,7 +691,7 @@
       "usecase:endpoint:usecase_text_gen"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:32.587Z",
+    "_fetchedAt": "2026-05-06T05:22:09.605Z",
     "_ngcSlug": "llama-3.2-3b-instruct"
   },
   "meta/llama-3.2-90b-vision-instruct": {
@@ -711,7 +713,7 @@
       "usecase:endpoint:usecase_text_gen"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.551Z",
+    "_fetchedAt": "2026-05-06T05:22:07.640Z",
     "_ngcSlug": "llama-3.2-90b-vision-instruct"
   },
   "meta/llama-3.3-70b-instruct": {
@@ -735,7 +737,7 @@
       "usecase:endpoint:usecase_text_gen"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.922Z",
+    "_fetchedAt": "2026-05-06T05:22:09.019Z",
     "_ngcSlug": "llama-3_3-70b-instruct"
   },
   "meta/llama-4-maverick-17b-128e-instruct": {
@@ -757,7 +759,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:32.951Z",
+    "_fetchedAt": "2026-05-06T05:22:08.928Z",
     "_ngcSlug": "llama-4-maverick-17b-128e-instruct"
   },
   "meta/llama-guard-4-12b": {
@@ -772,7 +774,6 @@
       "Content Safety",
       "Guardrail",
       "LLM Multimodal Safety",
-      "cloudPartnerType:endpoint:cloud_partner_type_deepinfra",
       "cloudPartnerType:endpoint:cloud_partner_type_together",
       "nimType:endpoint:nim_type_preview",
       "nimType:endpoint:nim_type_upgrade_available"
@@ -780,7 +781,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.669Z",
+    "_fetchedAt": "2026-05-06T05:22:07.188Z",
     "_ngcSlug": "llama-guard-4-12b"
   },
   "microsoft/TRELLIS": {
@@ -800,7 +801,7 @@
       "text-to-3d"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:32.862Z",
+    "_fetchedAt": "2026-05-06T05:22:07.852Z",
     "_ngcSlug": "trellis"
   },
   "microsoft/phi-4-mini-instruct": {
@@ -821,7 +822,7 @@
       "usecase:endpoint:usecase_text_gen"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.437Z",
+    "_fetchedAt": "2026-05-06T05:22:09.153Z",
     "_ngcSlug": "phi-4-mini-instruct"
   },
   "microsoft/phi-4-multimodal-instruct": {
@@ -846,7 +847,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.750Z",
+    "_fetchedAt": "2026-05-06T05:22:09.421Z",
     "_ngcSlug": "phi-4-multimodal-instruct"
   },
   "minimaxai/minimax-m2.5": {
@@ -880,7 +881,7 @@
       "text-to-text"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.885Z",
+    "_fetchedAt": "2026-05-06T05:22:08.570Z",
     "_ngcSlug": "minimax-m2.5"
   },
   "minimaxai/minimax-m2.7": {
@@ -914,7 +915,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.940Z",
+    "_fetchedAt": "2026-05-06T05:22:09.856Z",
     "_ngcSlug": "minimax-m2.7"
   },
   "mistralai/devstral-2-123b-instruct-2512": {
@@ -943,7 +944,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:32.476Z",
+    "_fetchedAt": "2026-05-06T05:22:08.150Z",
     "_ngcSlug": "devstral-2-123b-instruct-2512"
   },
   "mistralai/magistral-small-2506": {
@@ -967,7 +968,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.795Z",
+    "_fetchedAt": "2026-05-06T05:22:08.479Z",
     "_ngcSlug": "magistral-small-2506"
   },
   "mistralai/ministral-14b-instruct-2512": {
@@ -997,7 +998,7 @@
       "usecase:endpoint:usecase_text_gen"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.188Z",
+    "_fetchedAt": "2026-05-06T05:22:09.232Z",
     "_ngcSlug": "ministral-14b-instruct-2512"
   },
   "mistralai/mistral-7b-instruct-v0.3": {
@@ -1023,7 +1024,7 @@
       "usecase:endpoint:usecase_text_gen"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.579Z",
+    "_fetchedAt": "2026-05-06T05:22:07.637Z",
     "_ngcSlug": "mistral-7b-instruct-v03"
   },
   "mistralai/mistral-large-3-675b-instruct-2512": {
@@ -1057,7 +1058,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.760Z",
+    "_fetchedAt": "2026-05-06T05:22:09.532Z",
     "_ngcSlug": "mistral-large-3-675b-instruct-2512"
   },
   "mistralai/mistral-medium-3-instruct": {
@@ -1077,7 +1078,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.347Z",
+    "_fetchedAt": "2026-05-06T05:22:09.106Z",
     "_ngcSlug": "mistral-medium-3-instruct"
   },
   "mistralai/mistral-medium-3.5-128b": {
@@ -1105,7 +1106,7 @@
       "text"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.439Z",
+    "_fetchedAt": "2026-05-06T05:22:08.126Z",
     "_ngcSlug": "mistral-medium-3.5-128b"
   },
   "mistralai/mistral-nemotron": {
@@ -1127,7 +1128,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.249Z",
+    "_fetchedAt": "2026-05-06T05:22:08.740Z",
     "_ngcSlug": "mistral-nemotron"
   },
   "mistralai/mistral-small-4-119b-2603": {
@@ -1156,7 +1157,7 @@
       "reasoning"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.552Z",
+    "_fetchedAt": "2026-05-06T05:22:09.268Z",
     "_ngcSlug": "mistral-small-4-119b-2603"
   },
   "mistralai/mixtral-8x22b-instruct-v0.1": {
@@ -1178,7 +1179,7 @@
       "usecase:endpoint:usecase_text_gen"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.643Z",
+    "_fetchedAt": "2026-05-06T05:22:07.457Z",
     "_ngcSlug": "mixtral-8x22b-instruct"
   },
   "mistralai/mixtral-8x7b-instruct-v0.1": {
@@ -1200,7 +1201,7 @@
       "usecase:endpoint:usecase_text_gen"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.193Z",
+    "_fetchedAt": "2026-05-06T05:22:07.550Z",
     "_ngcSlug": "mixtral-8x7b-instruct"
   },
   "mit/Boltz-2": {
@@ -1219,7 +1220,7 @@
       "usecase:endpoint:usecase_drug_discovery"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:35.375Z",
+    "_fetchedAt": "2026-05-06T05:22:07.875Z",
     "_ngcSlug": "boltz2"
   },
   "mit/diffdock": {
@@ -1238,7 +1239,7 @@
       "usecase:endpoint:usecase_drug_discovery"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:32.588Z",
+    "_fetchedAt": "2026-05-06T05:22:08.155Z",
     "_ngcSlug": "diffdock"
   },
   "moonshotai/kimi-k2-instruct": {
@@ -1264,7 +1265,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:32.690Z",
+    "_fetchedAt": "2026-05-06T05:22:09.043Z",
     "_ngcSlug": "kimi-k2-instruct"
   },
   "moonshotai/kimi-k2-instruct-0905": {
@@ -1297,7 +1298,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.353Z",
+    "_fetchedAt": "2026-05-06T05:22:07.442Z",
     "_ngcSlug": "kimi-k2-instruct-0905"
   },
   "moonshotai/kimi-k2-thinking": {
@@ -1327,7 +1328,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.148Z",
+    "_fetchedAt": "2026-05-06T05:22:09.200Z",
     "_ngcSlug": "kimi-k2-thinking"
   },
   "moonshotai/kimi-k2.6": {
@@ -1365,7 +1366,7 @@
       "usecase:endpoint:usecase_text_gen"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:32.677Z",
+    "_fetchedAt": "2026-05-06T05:22:07.724Z",
     "_ngcSlug": "kimi-k2.6"
   },
   "nvidia/Active Speaker Detection": {
@@ -1391,7 +1392,7 @@
     ],
     "preview": true,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:35.336Z",
+    "_fetchedAt": "2026-05-06T05:22:07.610Z",
     "_ngcSlug": "active-speaker-detection"
   },
   "nvidia/Background Noise Removal": {
@@ -1406,7 +1407,7 @@
       "nimType:endpoint:nim_type_run_anywhere"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:35.277Z",
+    "_fetchedAt": "2026-05-06T05:22:09.237Z",
     "_ngcSlug": "bnr"
   },
   "nvidia/LipSync": {
@@ -1426,7 +1427,7 @@
       "translation"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:35.222Z",
+    "_fetchedAt": "2026-05-06T05:22:07.361Z",
     "_ngcSlug": "lipsync"
   },
   "nvidia/NVIDIA AI for Media Relighting": {
@@ -1441,7 +1442,7 @@
       "remote contribution"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.885Z",
+    "_fetchedAt": "2026-05-06T05:22:08.569Z",
     "_ngcSlug": "relighting"
   },
   "nvidia/bevformer": {
@@ -1460,7 +1461,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:35.061Z",
+    "_fetchedAt": "2026-05-06T05:22:07.370Z",
     "_ngcSlug": "bevformer"
   },
   "nvidia/canary-1b-asr": {
@@ -1477,7 +1478,7 @@
       "nimType:endpoint:nim_type_run_anywhere"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.284Z",
+    "_fetchedAt": "2026-05-06T05:22:07.379Z",
     "_ngcSlug": "canary-1b-asr"
   },
   "nvidia/conformer-ctc-asr": {
@@ -1494,7 +1495,7 @@
       "usecase:endpoint:usecase_speech_to_text"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.479Z",
+    "_fetchedAt": "2026-05-06T05:22:08.384Z",
     "_ngcSlug": "conformer-ctc-asr"
   },
   "nvidia/cosmos-predict1-5b": {
@@ -1512,7 +1513,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:32.868Z",
+    "_fetchedAt": "2026-05-06T05:22:08.343Z",
     "_ngcSlug": "cosmos-predict1-5b"
   },
   "nvidia/cosmos-reason2-8b": {
@@ -1536,7 +1537,7 @@
       "vision language model"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:32.674Z",
+    "_fetchedAt": "2026-05-06T05:22:07.683Z",
     "_ngcSlug": "cosmos-reason2-8b"
   },
   "nvidia/cosmos-transfer1-7b": {
@@ -1554,7 +1555,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.287Z",
+    "_fetchedAt": "2026-05-06T05:22:09.102Z",
     "_ngcSlug": "cosmos-transfer1-7b"
   },
   "nvidia/cosmos-transfer2.5-2b": {
@@ -1574,7 +1575,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:35.120Z",
+    "_fetchedAt": "2026-05-06T05:22:07.191Z",
     "_ngcSlug": "cosmos-transfer2_5-2b"
   },
   "nvidia/cuopt": {
@@ -1586,7 +1587,7 @@
       "usecase:endpoint:usecase_route_optimization"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:32.760Z",
+    "_fetchedAt": "2026-05-06T05:22:07.814Z",
     "_ngcSlug": "nvidia-cuopt"
   },
   "nvidia/eyecontact": {
@@ -1601,7 +1602,7 @@
       "usecase:endpoint:usecase_gaze_correction"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.343Z",
+    "_fetchedAt": "2026-05-06T05:22:08.379Z",
     "_ngcSlug": "eyecontact"
   },
   "nvidia/fourcastnet": {
@@ -1616,7 +1617,7 @@
       "usecase:endpoint:usecase_weather_simulation"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.337Z",
+    "_fetchedAt": "2026-05-06T05:22:08.059Z",
     "_ngcSlug": "fourcastnet"
   },
   "nvidia/genmol": {
@@ -1637,7 +1638,7 @@
       "usecase:endpoint:usecase_drug_discovery"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:32.584Z",
+    "_fetchedAt": "2026-05-06T05:22:08.141Z",
     "_ngcSlug": "genmol-generate"
   },
   "nvidia/gliner-pii": {
@@ -1654,7 +1655,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.828Z",
+    "_fetchedAt": "2026-05-06T05:22:09.701Z",
     "_ngcSlug": "gliner-pii"
   },
   "nvidia/ising-calibration-1-35b-a3b": {
@@ -1673,7 +1674,7 @@
       "reasoning"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.552Z",
+    "_fetchedAt": "2026-05-06T05:22:07.552Z",
     "_ngcSlug": "ising-calibration-1-35b-a3b"
   },
   "nvidia/llama-3.1-nemoguard-8b-content-safety": {
@@ -1691,7 +1692,7 @@
       "nimType:endpoint:nim_type_run_anywhere"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:32.900Z",
+    "_fetchedAt": "2026-05-06T05:22:08.854Z",
     "_ngcSlug": "llama-3_1-nemoguard-8b-content-safety"
   },
   "nvidia/llama-3.1-nemoguard-8b-topic-control": {
@@ -1709,7 +1710,7 @@
       "nimType:endpoint:nim_type_run_anywhere"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.347Z",
+    "_fetchedAt": "2026-05-06T05:22:08.655Z",
     "_ngcSlug": "llama-3_1-nemoguard-8b-topic-control"
   },
   "nvidia/llama-3.1-nemotron-nano-8b-v1": {
@@ -1734,7 +1735,7 @@
       "playgroundType:endpoint:playgroundtype_chat"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.560Z",
+    "_fetchedAt": "2026-05-06T05:22:09.694Z",
     "_ngcSlug": "llama-3_1-nemotron-nano-8b-v1"
   },
   "nvidia/llama-3.1-nemotron-nano-vl-8b-v1": {
@@ -1751,7 +1752,7 @@
       "playgroundType:endpoint:playgroundtype_chat"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.533Z",
+    "_fetchedAt": "2026-05-06T05:22:07.613Z",
     "_ngcSlug": "llama-3.1-nemotron-nano-vl-8b-v1"
   },
   "nvidia/llama-3.1-nemotron-safety-guard-8b-v3": {
@@ -1777,7 +1778,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.853Z",
+    "_fetchedAt": "2026-05-06T05:22:08.943Z",
     "_ngcSlug": "llama-3_1-nemotron-safety-guard-8b-v3"
   },
   "nvidia/llama-3.2-nemoretriever-500m-rerank-v2": {
@@ -1793,7 +1794,7 @@
       "usecase:endpoint:usecase_rag"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.382Z",
+    "_fetchedAt": "2026-05-06T05:22:08.076Z",
     "_ngcSlug": "llama-3_2-nemoretriever-500m-rerank-v2"
   },
   "nvidia/llama-3.2-nv-embedqa-1b-v2": {
@@ -1813,7 +1814,7 @@
       "usecase:endpoint:usecase_text_to_embedding"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.159Z",
+    "_fetchedAt": "2026-05-06T05:22:08.740Z",
     "_ngcSlug": "llama-3_2-nv-embedqa-1b-v2"
   },
   "nvidia/llama-3.2-nv-rerankqa-1b-v2": {
@@ -1828,7 +1829,7 @@
       "usecase:endpoint:usecase_rag"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.159Z",
+    "_fetchedAt": "2026-05-06T05:22:09.203Z",
     "_ngcSlug": "llama-3_2-nv-rerankqa-1b-v2"
   },
   "nvidia/llama-3.3-nemotron-super-49b-v1": {
@@ -1855,7 +1856,7 @@
       "playgroundType:endpoint:playgroundtype_chat"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.267Z",
+    "_fetchedAt": "2026-05-06T05:22:09.825Z",
     "_ngcSlug": "llama-3_3-nemotron-super-49b-v1"
   },
   "nvidia/llama-3.3-nemotron-super-49b-v1.5": {
@@ -1882,7 +1883,7 @@
       "playgroundType:endpoint:playgroundtype_chat"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.009Z",
+    "_fetchedAt": "2026-05-06T05:22:07.936Z",
     "_ngcSlug": "llama-3_3-nemotron-super-49b-v1_5"
   },
   "nvidia/llama-3_2-nemoretriever-300m-embed-v1": {
@@ -1902,7 +1903,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.981Z",
+    "_fetchedAt": "2026-05-06T05:22:09.799Z",
     "_ngcSlug": "llama-3_2-nemoretriever-300m-embed-v1"
   },
   "nvidia/llama-3_2-nemoretriever-300m-embed-v2": {
@@ -1920,7 +1921,7 @@
       "usecase:endpoint:usecase_text_to_embedding"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.925Z",
+    "_fetchedAt": "2026-05-06T05:22:09.040Z",
     "_ngcSlug": "llama-3_2-nemoretriever-300m-embed-v2"
   },
   "nvidia/llama-nemotron-embed-1b-v2": {
@@ -1937,7 +1938,7 @@
       "usecase:endpoint:usecase_text_to_embedding"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.764Z",
+    "_fetchedAt": "2026-05-06T05:22:08.829Z",
     "_ngcSlug": "llama-nemotron-embed-1b-v2"
   },
   "nvidia/llama-nemotron-embed-vl-1b-v2": {
@@ -1959,7 +1960,7 @@
       "usecase:endpoint:usecase_text_to_embedding"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.086Z",
+    "_fetchedAt": "2026-05-06T05:22:07.935Z",
     "_ngcSlug": "llama-nemotron-embed-vl-1b-v2"
   },
   "nvidia/llama-nemotron-rerank-1b-v2": {
@@ -1974,7 +1975,7 @@
       "usecase:endpoint:usecase_rag"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.563Z",
+    "_fetchedAt": "2026-05-06T05:22:08.256Z",
     "_ngcSlug": "llama-nemotron-rerank-1b-v2"
   },
   "nvidia/llama-nemotron-rerank-vl-1b-v2": {
@@ -1994,7 +1995,7 @@
       "usecase:endpoint:usecase_rag"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.648Z",
+    "_fetchedAt": "2026-05-06T05:22:09.876Z",
     "_ngcSlug": "llama-nemotron-rerank-vl-1b-v2"
   },
   "nvidia/magpie-tts-multilingual": {
@@ -2011,7 +2012,7 @@
       "usecase:endpoint:usecase_text_to_speech"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.948Z",
+    "_fetchedAt": "2026-05-06T05:22:09.714Z",
     "_ngcSlug": "magpie-tts-multilingual"
   },
   "nvidia/magpie-tts-zeroshot": {
@@ -2028,7 +2029,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:32.984Z",
+    "_fetchedAt": "2026-05-06T05:22:08.219Z",
     "_ngcSlug": "magpie-tts-zeroshot"
   },
   "nvidia/megatron-1b-nmt": {
@@ -2043,7 +2044,7 @@
       "usecase:endpoint:usecase_text_translation"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:35.165Z",
+    "_fetchedAt": "2026-05-06T05:22:07.371Z",
     "_ngcSlug": "megatron-1b-nmt"
   },
   "nvidia/molmim": {
@@ -2060,7 +2061,7 @@
       "usecase:endpoint:usecase_drug_discovery"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.385Z",
+    "_fetchedAt": "2026-05-06T05:22:08.657Z",
     "_ngcSlug": "molmim-generate"
   },
   "nvidia/nemoguard-jailbreak-detect": {
@@ -2079,7 +2080,7 @@
       "nimType:endpoint:nim_type_run_anywhere"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.886Z",
+    "_fetchedAt": "2026-05-06T05:22:08.475Z",
     "_ngcSlug": "nemoguard-jailbreak-detect"
   },
   "nvidia/nemoretriever-graphic-elements-v1": {
@@ -2097,7 +2098,7 @@
       "usecase:endpoint:usecase_object_detect"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.147Z",
+    "_fetchedAt": "2026-05-06T05:22:07.963Z",
     "_ngcSlug": "nemoretriever-graphic-elements-v1"
   },
   "nvidia/nemoretriever-ocr": {
@@ -2113,7 +2114,7 @@
       "usecase:endpoint:usecase_optical_character_recog"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.668Z",
+    "_fetchedAt": "2026-05-06T05:22:09.873Z",
     "_ngcSlug": "nemoretriever-ocr"
   },
   "nvidia/nemoretriever-ocr-v1": {
@@ -2128,7 +2129,7 @@
       "usecase:endpoint:usecase_optical_character_recog"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.898Z",
+    "_fetchedAt": "2026-05-06T05:22:08.556Z",
     "_ngcSlug": "nemoretriever-ocr-v1"
   },
   "nvidia/nemoretriever-page-elements-v2": {
@@ -2147,7 +2148,7 @@
       "usecase:endpoint:usecase_object_detect"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.099Z",
+    "_fetchedAt": "2026-05-06T05:22:07.992Z",
     "_ngcSlug": "nemoretriever-page-elements-v2"
   },
   "nvidia/nemoretriever-page-elements-v3": {
@@ -2165,7 +2166,7 @@
       "usecase:endpoint:usecase_object_detect"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.099Z",
+    "_fetchedAt": "2026-05-06T05:22:09.290Z",
     "_ngcSlug": "nemoretriever-page-elements-v3"
   },
   "nvidia/nemoretriever-parse": {
@@ -2182,7 +2183,7 @@
       "table extraction"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.961Z",
+    "_fetchedAt": "2026-05-06T05:22:09.525Z",
     "_ngcSlug": "nemoretriever-parse"
   },
   "nvidia/nemoretriever-table-structure-v1": {
@@ -2200,7 +2201,7 @@
       "usecase:endpoint:usecase_object_detect"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.108Z",
+    "_fetchedAt": "2026-05-06T05:22:08.013Z",
     "_ngcSlug": "nemoretriever-table-structure-v1"
   },
   "nvidia/nemotron-3-content-safety": {
@@ -2222,7 +2223,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.400Z",
+    "_fetchedAt": "2026-05-06T05:22:08.685Z",
     "_ngcSlug": "nemotron-3-content-safety"
   },
   "nvidia/nemotron-3-nano-30b-a3b": {
@@ -2245,7 +2246,7 @@
       "playgroundType:endpoint:playgroundtype_chat"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.729Z",
+    "_fetchedAt": "2026-05-06T05:22:07.494Z",
     "_ngcSlug": "nemotron-3-nano-30b-a3b"
   },
   "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": {
@@ -2271,7 +2272,7 @@
       "usecase:endpoint:usecase_text_gen"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.671Z",
+    "_fetchedAt": "2026-05-06T05:22:08.363Z",
     "_ngcSlug": "nemotron-3-nano-omni-30b-a3b-reasoning"
   },
   "nvidia/nemotron-3-super-120b-a12b": {
@@ -2298,7 +2299,7 @@
       "playgroundType:endpoint:playgroundtype_chat"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:32.812Z",
+    "_fetchedAt": "2026-05-06T05:22:07.745Z",
     "_ngcSlug": "nemotron-3-super-120b-a12b"
   },
   "nvidia/nemotron-asr-streaming": {
@@ -2316,7 +2317,7 @@
       "usecase:endpoint:usecase_speech_recognition"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.166Z",
+    "_fetchedAt": "2026-05-06T05:22:07.466Z",
     "_ngcSlug": "nemotron-asr-streaming"
   },
   "nvidia/nemotron-content-safety-reasoning-4b": {
@@ -2338,7 +2339,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.726Z",
+    "_fetchedAt": "2026-05-06T05:22:07.461Z",
     "_ngcSlug": "nemotron-content-safety-reasoning-4b"
   },
   "nvidia/nemotron-graphic-elements-v1": {
@@ -2355,7 +2356,7 @@
       "usecase:endpoint:usecase_object_detect"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.248Z",
+    "_fetchedAt": "2026-05-06T05:22:08.761Z",
     "_ngcSlug": "nemotron-graphic-elements-v1"
   },
   "nvidia/nemotron-mini-4b-instruct": {
@@ -2373,7 +2374,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.672Z",
+    "_fetchedAt": "2026-05-06T05:22:09.326Z",
     "_ngcSlug": "nemotron-mini-4b-instruct"
   },
   "nvidia/nemotron-nano-12b-v2-vl": {
@@ -2393,7 +2394,7 @@
       "visual question answering"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.619Z",
+    "_fetchedAt": "2026-05-06T05:22:07.642Z",
     "_ngcSlug": "nemotron-nano-12b-v2-vl"
   },
   "nvidia/nemotron-ocr-v1": {
@@ -2408,7 +2409,7 @@
       "usecase:endpoint:usecase_optical_character_recog"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.962Z",
+    "_fetchedAt": "2026-05-06T05:22:09.777Z",
     "_ngcSlug": "nemotron-ocr-v1"
   },
   "nvidia/nemotron-page-elements-v3": {
@@ -2424,7 +2425,7 @@
       "usecase:endpoint:usecase_object_detect"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.425Z",
+    "_fetchedAt": "2026-05-06T05:22:09.120Z",
     "_ngcSlug": "nemotron-page-elements-v3"
   },
   "nvidia/nemotron-parse": {
@@ -2444,7 +2445,7 @@
       "text and table extraction"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.553Z",
+    "_fetchedAt": "2026-05-06T05:22:09.504Z",
     "_ngcSlug": "nemotron-parse"
   },
   "nvidia/nemotron-table-structure-v1": {
@@ -2461,7 +2462,7 @@
       "usecase:endpoint:usecase_object_detect"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.057Z",
+    "_fetchedAt": "2026-05-06T05:22:08.254Z",
     "_ngcSlug": "nemotron-table-structure-v1"
   },
   "nvidia/nemotron-voicechat": {
@@ -2480,7 +2481,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:32.952Z",
+    "_fetchedAt": "2026-05-06T05:22:08.926Z",
     "_ngcSlug": "nemotron-voicechat"
   },
   "nvidia/nv-embed-v1": {
@@ -2496,7 +2497,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:32.581Z",
+    "_fetchedAt": "2026-05-06T05:22:08.171Z",
     "_ngcSlug": "nv-embed-v1"
   },
   "nvidia/nv-embedcode-7b-v1": {
@@ -2513,7 +2514,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.060Z",
+    "_fetchedAt": "2026-05-06T05:22:08.255Z",
     "_ngcSlug": "nv-embedcode-7b-v1"
   },
   "nvidia/nv-embedqa-e5-v5": {
@@ -2531,7 +2532,7 @@
       "usecase:endpoint:usecase_text_to_embedding"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.107Z",
+    "_fetchedAt": "2026-05-06T05:22:08.050Z",
     "_ngcSlug": "nv-embedqa-e5-v5"
   },
   "nvidia/nv-yolox-page-elements-v1": {
@@ -2549,7 +2550,7 @@
       "run-on-rtx"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.604Z",
+    "_fetchedAt": "2026-05-06T05:22:07.592Z",
     "_ngcSlug": "nv-yolox-page-elements-v1"
   },
   "nvidia/nvclip": {
@@ -2563,7 +2564,7 @@
       "text and image"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.434Z",
+    "_fetchedAt": "2026-05-06T05:22:08.674Z",
     "_ngcSlug": "nvclip"
   },
   "nvidia/nvidia-nemotron-nano-9b-v2": {
@@ -2584,7 +2585,7 @@
       "thinking budget"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.226Z",
+    "_fetchedAt": "2026-05-06T05:22:07.515Z",
     "_ngcSlug": "nvidia-nemotron-nano-9b-v2"
   },
   "nvidia/parakeet-1.1b-rnnt-multilingual-asr": {
@@ -2599,7 +2600,7 @@
       "usecase:endpoint:usecase_speech_to_text"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.875Z",
+    "_fetchedAt": "2026-05-06T05:22:08.847Z",
     "_ngcSlug": "parakeet-1_1b-rnnt-multilingual-asr"
   },
   "nvidia/parakeet-ctc-0.6b-asr": {
@@ -2618,7 +2619,7 @@
       "usecase:endpoint:usecase_speech_to_text"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:32.971Z",
+    "_fetchedAt": "2026-05-06T05:22:08.381Z",
     "_ngcSlug": "parakeet-ctc-0_6b-asr"
   },
   "nvidia/parakeet-ctc-0.6b-es": {
@@ -2634,7 +2635,7 @@
       "usecase:endpoint:usecase_speech_to_text"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.676Z",
+    "_fetchedAt": "2026-05-06T05:22:09.632Z",
     "_ngcSlug": "parakeet-ctc-0_6b-es"
   },
   "nvidia/parakeet-ctc-0.6b-vi": {
@@ -2650,7 +2651,7 @@
       "usecase:endpoint:usecase_speech_to_text"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:35.018Z",
+    "_fetchedAt": "2026-05-06T05:22:07.528Z",
     "_ngcSlug": "parakeet-ctc-0_6b-vi"
   },
   "nvidia/parakeet-ctc-0.6b-zh-cn": {
@@ -2666,7 +2667,7 @@
       "usecase:endpoint:usecase_speech_to_text"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.685Z",
+    "_fetchedAt": "2026-05-06T05:22:09.430Z",
     "_ngcSlug": "parakeet-ctc-0_6b-zh-cn"
   },
   "nvidia/parakeet-ctc-0.6b-zh-tw": {
@@ -2683,7 +2684,7 @@
       "usecase:endpoint:usecase_speech_to_text"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:32.578Z",
+    "_fetchedAt": "2026-05-06T05:22:09.618Z",
     "_ngcSlug": "parakeet-ctc-0_6b-zh-tw"
   },
   "nvidia/parakeet-ctc-1.1b-asr": {
@@ -2700,7 +2701,7 @@
       "usecase:endpoint:usecase_speech_to_text"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.435Z",
+    "_fetchedAt": "2026-05-06T05:22:08.466Z",
     "_ngcSlug": "parakeet-ctc-1_1b-asr"
   },
   "nvidia/parakeet-tdt-0.6b-v2": {
@@ -2717,7 +2718,7 @@
       "speech-to-text"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.820Z",
+    "_fetchedAt": "2026-05-06T05:22:09.865Z",
     "_ngcSlug": "parakeet-tdt-0_6b-v2"
   },
   "nvidia/rerank-qa-mistral-4b": {
@@ -2734,7 +2735,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:32.775Z",
+    "_fetchedAt": "2026-05-06T05:22:07.976Z",
     "_ngcSlug": "rerank-qa-mistral-4b"
   },
   "nvidia/riva-translate-1.6b": {
@@ -2749,7 +2750,7 @@
       "usecase:endpoint:usecase_text_translation"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.088Z",
+    "_fetchedAt": "2026-05-06T05:22:09.321Z",
     "_ngcSlug": "riva-translate-1_6b"
   },
   "nvidia/riva-translate-4b-instruct-v1_1": {
@@ -2767,7 +2768,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.069Z",
+    "_fetchedAt": "2026-05-06T05:22:09.703Z",
     "_ngcSlug": "riva-translate-4b-instruct-v1_1"
   },
   "nvidia/sparsedrive": {
@@ -2786,7 +2787,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.437Z",
+    "_fetchedAt": "2026-05-06T05:22:08.664Z",
     "_ngcSlug": "sparsedrive"
   },
   "nvidia/streampetr": {
@@ -2806,7 +2807,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.262Z",
+    "_fetchedAt": "2026-05-06T05:22:08.827Z",
     "_ngcSlug": "streampetr"
   },
   "nvidia/studiovoice": {
@@ -2825,7 +2826,7 @@
     ],
     "preview": true,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.505Z",
+    "_fetchedAt": "2026-05-06T05:22:09.190Z",
     "_ngcSlug": "studiovoice"
   },
   "nvidia/synthetic-video-detector": {
@@ -2846,7 +2847,7 @@
     ],
     "preview": true,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.479Z",
+    "_fetchedAt": "2026-05-06T05:22:08.470Z",
     "_ngcSlug": "synthetic-video-detector"
   },
   "nvidia/usdcode": {
@@ -2866,7 +2867,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:35.133Z",
+    "_fetchedAt": "2026-05-06T05:22:07.197Z",
     "_ngcSlug": "usdcode"
   },
   "nvidia/usdvalidate": {
@@ -2885,7 +2886,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.074Z",
+    "_fetchedAt": "2026-05-06T05:22:08.254Z",
     "_ngcSlug": "usdvalidate"
   },
   "nvidia/vista-3d": {
@@ -2900,7 +2901,7 @@
       "usecase:endpoint:usecase_medical_imaging"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.763Z",
+    "_fetchedAt": "2026-05-06T05:22:09.359Z",
     "_ngcSlug": "vista-3d"
   },
   "openai/gpt-oss-120b": {
@@ -2928,7 +2929,7 @@
       "text-to-text"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:32.666Z",
+    "_fetchedAt": "2026-05-06T05:22:07.757Z",
     "_ngcSlug": "gpt-oss-120b"
   },
   "openai/gpt-oss-20b": {
@@ -2957,7 +2958,7 @@
       "text-to-text"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.761Z",
+    "_fetchedAt": "2026-05-06T05:22:09.188Z",
     "_ngcSlug": "gpt-oss-20b"
   },
   "openai/whisper-large-v3": {
@@ -2981,7 +2982,7 @@
       "whisper"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.531Z",
+    "_fetchedAt": "2026-05-06T05:22:08.479Z",
     "_ngcSlug": "whisper-large-v3"
   },
   "openfold/openfold2": {
@@ -3000,7 +3001,7 @@
       "usecase:endpoint:usecase_drug_discovery"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:32.767Z",
+    "_fetchedAt": "2026-05-06T05:22:07.785Z",
     "_ngcSlug": "openfold2"
   },
   "openfold/openfold3": {
@@ -3025,7 +3026,7 @@
       "usecase:endpoint:usecase_drug_discovery"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:32.966Z",
+    "_fetchedAt": "2026-05-06T05:22:08.932Z",
     "_ngcSlug": "openfold3"
   },
   "qwen/qwen-image": {
@@ -3042,7 +3043,7 @@
       "usecase:endpoint:usecase_text_to_image"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:35.313Z",
+    "_fetchedAt": "2026-05-06T05:22:07.259Z",
     "_ngcSlug": "qwen-image"
   },
   "qwen/qwen-image-edit": {
@@ -3060,7 +3061,7 @@
       "usecase:endpoint:usecase_text_to_image"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:35.159Z",
+    "_fetchedAt": "2026-05-06T05:22:07.282Z",
     "_ngcSlug": "qwen-image-edit"
   },
   "qwen/qwen2.5-coder-32b-instruct": {
@@ -3080,7 +3081,7 @@
       "text-to-code"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.794Z",
+    "_fetchedAt": "2026-05-06T05:22:09.441Z",
     "_ngcSlug": "qwen2_5-coder-32b-instruct"
   },
   "qwen/qwen3-coder-480b-a35b-instruct": {
@@ -3107,7 +3108,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:35.045Z",
+    "_fetchedAt": "2026-05-06T05:22:09.789Z",
     "_ngcSlug": "qwen3-coder-480b-a35b-instruct"
   },
   "qwen/qwen3-next-80b-a3b-instruct": {
@@ -3132,7 +3133,7 @@
       "text-generation"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.886Z",
+    "_fetchedAt": "2026-05-06T05:22:08.576Z",
     "_ngcSlug": "qwen3-next-80b-a3b-instruct"
   },
   "qwen/qwen3-next-80b-a3b-thinking": {
@@ -3156,7 +3157,7 @@
       "playgroundType:endpoint:playgroundtype_chat"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.441Z",
+    "_fetchedAt": "2026-05-06T05:22:08.125Z",
     "_ngcSlug": "qwen3-next-80b-a3b-thinking"
   },
   "qwen/qwen3.5-122b-a10b": {
@@ -3190,7 +3191,7 @@
       "tool calling"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.200Z",
+    "_fetchedAt": "2026-05-06T05:22:08.033Z",
     "_ngcSlug": "qwen3.5-122b-a10b"
   },
   "qwen/qwen3.5-397b-a17b": {
@@ -3227,7 +3228,7 @@
       "playgroundType:endpoint:playgroundtype_chat"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.202Z",
+    "_fetchedAt": "2026-05-06T05:22:07.543Z",
     "_ngcSlug": "qwen3.5-397b-a17b"
   },
   "sarvamai/sarvam-m": {
@@ -3253,7 +3254,7 @@
       "reasoning"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:32.681Z",
+    "_fetchedAt": "2026-05-06T05:22:08.220Z",
     "_ngcSlug": "sarvam-m"
   },
   "siemens/simcenter-star-ccm+": {
@@ -3269,7 +3270,7 @@
     ],
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:35.312Z",
+    "_fetchedAt": "2026-05-06T05:22:07.368Z",
     "_ngcSlug": "star-ccm"
   },
   "stabilityai/stable-diffusion-3.5-large": {
@@ -3291,7 +3292,7 @@
       "usecase:endpoint:usecase_text_to_image"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:35.230Z",
+    "_fetchedAt": "2026-05-06T05:22:07.281Z",
     "_ngcSlug": "stable-diffusion-3_5-large"
   },
   "stepfun-ai/step-3.5-flash": {
@@ -3315,7 +3316,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:35.031Z",
+    "_fetchedAt": "2026-05-06T05:22:09.016Z",
     "_ngcSlug": "step-3.5-flash"
   },
   "stockmark/stockmark-2-100b-instruct": {
@@ -3337,7 +3338,7 @@
       "stockmark"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:32.865Z",
+    "_fetchedAt": "2026-05-06T05:22:07.833Z",
     "_ngcSlug": "stockmark-2-100b-instruct"
   },
   "upstage/solar-10.7b-instruct": {
@@ -3364,7 +3365,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:32.799Z",
+    "_fetchedAt": "2026-05-06T05:22:07.822Z",
     "_ngcSlug": "solar-10_7b-instruct"
   },
   "z-ai/glm-4.7": {
@@ -3398,7 +3399,7 @@
     "preview": true,
     "available": false,
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:33.980Z",
+    "_fetchedAt": "2026-05-06T05:22:07.908Z",
     "_ngcSlug": "glm-4.7"
   },
   "z-ai/glm-5.1": {
@@ -3425,7 +3426,7 @@
       "playgroundType:endpoint:playgroundtype_chat"
     ],
     "_source": "build.nvidia.com",
-    "_fetchedAt": "2026-05-06T04:31:34.342Z",
+    "_fetchedAt": "2026-05-06T05:22:08.055Z",
     "_ngcSlug": "glm-5.1"
   }
 }

@@ -12,7 +12,12 @@ const API_BASE_URL = "https://integrate.api.nvidia.com/v1";
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 20000);
 const MAX_CONCURRENCY = Math.max(1, Number(process.env.MAX_CONCURRENCY || 12));
 const CACHE_TTL_MS = Math.max(1000, Number(process.env.CACHE_TTL_MS || 5 * 60 * 1000));
-const PROBE_RATE_LIMIT_RPM = Math.max(1, Number(process.env.PROBE_RATE_LIMIT_RPM || 36));
+// Sole authority on NVIDIA call rate. Every probe goes through reserveProbeSlot
+// before fetch, which enforces a minimum gap of 60000 / PROBE_RATE_LIMIT_RPM
+// milliseconds between any two outgoing probes. NVIDIA's free-tier cap is
+// 40 RPM, so we run at exactly that — no separate front-end delay layered on
+// top.
+const PROBE_RATE_LIMIT_RPM = Math.max(1, Number(process.env.PROBE_RATE_LIMIT_RPM || 40));
 const PROBE_MIN_INTERVAL_MS = Math.max(
   250,
   Number(process.env.PROBE_MIN_INTERVAL_MS || Math.ceil(60000 / PROBE_RATE_LIMIT_RPM))
@@ -739,7 +744,8 @@ function buildColumns(rows) {
     "toolSupportChecked",
     "toolSupportReason",
     "toolSupportSummary",
-    "rateLimited"
+    "rateLimited",
+    "useCase" // surfaced only in the right-click usage popover, not the table
   ]);
 
   const keySet = new Set();
@@ -808,6 +814,9 @@ async function loadModelsWithMetadata({ forceRefresh = false } = {}) {
           // Show only plain tags — drop colon-prefixed system labels like
           // "playgroundType:endpoint:..." and "cloudPartnerType:endpoint:...".
           row.labels = spec.labels.filter((l) => typeof l === "string" && !l.includes(":")).join(", ");
+        }
+        if (spec && typeof spec.useCase === "string" && spec.useCase) {
+          row.useCase = spec.useCase;
         }
 
         // Inject cached probe results. Spec values from model_specs.json win over
