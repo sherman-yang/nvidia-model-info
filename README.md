@@ -15,8 +15,9 @@ NVIDIA's 40 RPM free-tier cap.
   table, removes duplicates, hides retired or disabled rows.
 - **Pinned columns** — `Live Ping`, `Model ID`, `Publisher`, `Labels`,
   `Context Limit`, `Max Output`, `Latency (ms)`, `Tool Support`, `Tested At`.
-- **Search & filter** — substring search across every cell, plus checkboxes
-  for "Exclude Inactive/Error" and "Tool Support only".
+- **Search & filter** — substring search across every cell with OR semantics
+  (space-separated terms; a row matches when any term appears in any column),
+  plus checkboxes for "Exclude Inactive/Error" and "Tool Support only".
 - **Live probing** — `Ping` per row or `Test Displayed Models` for a batch.
   Probes detect availability + latency, the output-token limit, and tool
   calling support (multiple request shapes, with retry on length-cutoff).

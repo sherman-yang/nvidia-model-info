@@ -288,7 +288,9 @@ async function copyTextToClipboard(text) {
 }
 
 function getFilteredAndSortedRows() {
-  const filter = state.filterText.trim().toLowerCase();
+  // Search uses OR semantics: split the input on whitespace and a row matches
+  // when ANY term appears in ANY column. Empty input matches everything.
+  const terms = state.filterText.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const filtered = state.rows.filter((row) => {
     if (state.excludeInactive) {
       const isError = row.liveTest === "Error" || row.contextLength === "Error" || row.maxOutputTokens === "Error";
@@ -302,7 +304,7 @@ function getFilteredAndSortedRows() {
       return false;
     }
 
-    if (!filter) {
+    if (terms.length === 0) {
       return true;
     }
 
@@ -311,9 +313,11 @@ function getFilteredAndSortedRows() {
       if (value === null || value === undefined) {
         continue;
       }
-
-      if (String(value).toLowerCase().includes(filter)) {
-        return true;
+      const cell = String(value).toLowerCase();
+      for (const term of terms) {
+        if (cell.includes(term)) {
+          return true;
+        }
       }
     }
 
