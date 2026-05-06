@@ -1,0 +1,9 @@
+{
+  "_comment": "Publisher-stated model limits. Keys are the API model id (publisher/model). Values use raw token counts (not strings like '128K'). Either field may be omitted; if maxOutputTokens is missing, /api/test-model will probe it.",
+  "_example": {
+    "meta/llama-3.3-70b-instruct": {
+      "contextLength": 131072,
+      "maxOutputTokens": 4096
+    }
+  }
+}

@@ -3,7 +3,6 @@ const searchInput = document.getElementById("search-input");
 const filterInactiveChk = document.getElementById("filter-inactive-chk");
 const filterToolSupportChk = document.getElementById("filter-tool-support-chk");
 const refreshBtn = document.getElementById("refresh-btn");
-const refreshCardsBtn = document.getElementById("refresh-cards-btn");
 const testDisplayedBtn = document.getElementById("test-displayed-btn");
 const batchProgressContainer = document.getElementById("batch-progress-container");
 const batchProgress = document.getElementById("batch-progress");
@@ -27,7 +26,6 @@ const COLUMN_WIDTHS = {
   liveTest: 170,
   modelId: 280,
   publisher: 160,
-  cardContextLength: 130,
   contextLength: 120,
   maxOutputTokens: 120,
   latencyMs: 110,
@@ -344,7 +342,6 @@ function makeHeaderLabel(columnKey) {
   if (columnKey === "modelId") return "Model ID";
   if (columnKey === "publisher") return "Publisher";
   if (columnKey === "modelName") return "Model Name";
-  if (columnKey === "cardContextLength") return "Card Context";
   if (columnKey === "contextLength") return "Context Limit";
   if (columnKey === "maxOutputTokens") return "Max Output";
   if (columnKey === "latencyMs") return "Latency (ms)";
@@ -407,13 +404,8 @@ function formatTokensToK(val) {
   if (typeof val === "number") {
     return Math.round(val / 1024) + "K";
   }
-  const str = String(val);
-  const geMatch = str.match(/^>=\s*(\d+)$/);
-  if (geMatch) {
-    return ">=" + Math.round(parseInt(geMatch[1], 10) / 1024) + "K";
-  }
-  const parsed = parseInt(str, 10);
-  if (!isNaN(parsed) && /^-?\d+$/.test(str.trim())) {
+  const parsed = parseInt(val, 10);
+  if (!isNaN(parsed)) {
     return Math.round(parsed / 1024) + "K";
   }
   return val;
@@ -466,9 +458,6 @@ async function runLiveTest(row, btn, isRetry = false) {
     row.latencyMs = data.latencyMs;
     row.contextLength = data.contextLength;
     row.maxOutputTokens = data.maxOutputTokens;
-    if (Object.prototype.hasOwnProperty.call(data, "cardContextLength")) {
-      row.cardContextLength = data.cardContextLength;
-    }
     row.toolSupport = data.toolSupportChecked ? Boolean(data.toolSupport) : "";
     row.toolSupportChecked = Boolean(data.toolSupportChecked);
     row.toolSupportReason = data.toolSupportReason || "";
@@ -720,11 +709,7 @@ function renderTableBody(rows) {
           runLiveTest(row, btn);
         };
         td.appendChild(btn);
-      } else if (
-        columnKey === "contextLength" ||
-        columnKey === "maxOutputTokens" ||
-        columnKey === "cardContextLength"
-      ) {
+      } else if (columnKey === "contextLength" || columnKey === "maxOutputTokens") {
         td.textContent = value === null || value === undefined ? "" : formatTokensToK(value);
       } else if (columnKey === "toolSupport") {
         td.textContent = row.toolSupportChecked === true ? (value === true ? "true" : "false") : "";
@@ -905,29 +890,6 @@ filterToolSupportChk.addEventListener("change", (event) => {
 
 refreshBtn.addEventListener("click", () => {
   loadData(true);
-});
-
-refreshCardsBtn.addEventListener("click", async () => {
-  const originalText = refreshCardsBtn.textContent;
-  refreshCardsBtn.disabled = true;
-  refreshCardsBtn.textContent = "Refreshing...";
-  try {
-    const r = await fetch("/api/refresh-cards", { method: "POST" });
-    const data = await r.json();
-    if (!r.ok) {
-      throw new Error(data.error || `HTTP ${r.status}`);
-    }
-    refreshCardsBtn.textContent = `Done — ${data.success}/${data.total} parsed`;
-    await loadData(true);
-  } catch (err) {
-    console.error("Refresh cards failed:", err);
-    refreshCardsBtn.textContent = "Failed";
-  } finally {
-    setTimeout(() => {
-      refreshCardsBtn.textContent = originalText;
-      refreshCardsBtn.disabled = false;
-    }, 3000);
-  }
 });
 
 testDisplayedBtn.addEventListener("click", (e) => {

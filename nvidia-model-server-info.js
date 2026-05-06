@@ -21,27 +21,7 @@ const PROBE_TIMEOUT_MS = Math.max(1000, Number(process.env.PROBE_TIMEOUT_MS || 1
 const TOOL_SUPPORT_TIMEOUT_MS = Math.max(1000, Number(process.env.TOOL_SUPPORT_TIMEOUT_MS || 25000));
 const PROBE_MAX_429_RETRIES = Math.max(0, Number(process.env.PROBE_MAX_429_RETRIES || 2));
 const PROBE_429_BACKOFF_MS = Math.max(1000, Number(process.env.PROBE_429_BACKOFF_MS || 10000));
-const CONTEXT_PROBE_PROMPT_TOKENS = Math.max(
-  2048,
-  Number(process.env.CONTEXT_PROBE_PROMPT_TOKENS || 262144)
-);
-const CONTEXT_PROBE_TIMEOUT_MS = Math.max(
-  5000,
-  Number(process.env.CONTEXT_PROBE_TIMEOUT_MS || 30000)
-);
-const MODEL_CARD_BASE_URL = process.env.MODEL_CARD_BASE_URL || "https://build.nvidia.com";
-const MODEL_CARD_CACHE_TTL_MS = Math.max(
-  60000,
-  Number(process.env.MODEL_CARD_CACHE_TTL_MS || 7 * 24 * 60 * 60 * 1000)
-);
-const MODEL_CARD_FETCH_TIMEOUT_MS = Math.max(
-  3000,
-  Number(process.env.MODEL_CARD_FETCH_TIMEOUT_MS || 20000)
-);
-const MODEL_CARD_CONCURRENCY = Math.max(
-  1,
-  Number(process.env.MODEL_CARD_CONCURRENCY || 4)
-);
+const MODEL_SPECS_FILE = path.join(__dirname, "model_specs.json");
 
 if (typeof fetch !== "function") {
   throw new Error("This app requires Node.js 18+ (global fetch is missing).");
@@ -97,6 +77,36 @@ const TOOL_SUPPORT_TOOL_SCHEMA = {
 
 function getApiKey() {
   return process.env[API_KEY_ENV_NAME];
+}
+
+let modelSpecsCache = null;
+let modelSpecsMtimeMs = 0;
+
+function loadModelSpecs() {
+  // Re-read the file when its mtime changes so users can edit model_specs.json
+  // and see results without restarting the server.
+  try {
+    if (!fs.existsSync(MODEL_SPECS_FILE)) {
+      modelSpecsCache = {};
+      modelSpecsMtimeMs = 0;
+      return modelSpecsCache;
+    }
+    const stat = fs.statSync(MODEL_SPECS_FILE);
+    if (modelSpecsCache && stat.mtimeMs === modelSpecsMtimeMs) {
+      return modelSpecsCache;
+    }
+    modelSpecsCache = JSON.parse(fs.readFileSync(MODEL_SPECS_FILE, "utf8"));
+    modelSpecsMtimeMs = stat.mtimeMs;
+  } catch (e) {
+    console.warn("Failed to read model_specs.json:", e.message);
+    if (!modelSpecsCache) modelSpecsCache = {};
+  }
+  return modelSpecsCache;
+}
+
+function getModelSpec(modelId) {
+  const specs = loadModelSpecs();
+  return specs[modelId] || null;
 }
 
 function launchBrowser(url) {
@@ -506,7 +516,6 @@ function toRow(listModel, metadata) {
     "completion_token_limit"
   ]) || "Not Tested";
 
-  row.cardContextLength = null; // Populated from build.nvidia.com model card cache
   row.liveTest = "Test"; // Placeholder for the frontend button
   row.latencyMs = ""; // Populated by live test
   row.toolSupport = ""; // Populated by live test
@@ -711,7 +720,6 @@ function buildColumns(rows) {
     "liveTest",
     "modelId",
     "publisher",
-    "cardContextLength",
     "contextLength",
     "maxOutputTokens",
     "latencyMs",
@@ -783,17 +791,25 @@ async function loadModelsWithMetadata({ forceRefresh = false } = {}) {
         const metadata = await getModelMetadata(listModel.id);
         const row = toRow(listModel, metadata);
 
-        // Inject cached model-card context length (cache-only — never fetches during list load)
-        const cardData = await getModelCardContext(row.modelId, { allowFetch: false });
-        if (cardData && cardData.cardContextLength != null) {
-          row.cardContextLength = cardData.cardContextLength;
+        // Inject publisher-stated limits from model_specs.json (source of truth).
+        const spec = getModelSpec(row.modelId);
+        if (spec && typeof spec.contextLength === "number") {
+          row.contextLength = spec.contextLength;
+        }
+        if (spec && typeof spec.maxOutputTokens === "number") {
+          row.maxOutputTokens = spec.maxOutputTokens;
         }
 
-        // Inject cached test results if available
+        // Inject cached probe results. Spec values from model_specs.json win over
+        // probed values, so we only fall back to the probe when the spec was missing.
         const tc = testCache[row.modelId];
-        if (tc && tc.contextLength != null) {
-          row.contextLength = tc.contextLength;
-          row.maxOutputTokens = tc.maxOutputTokens;
+        if (tc) {
+          if (typeof row.contextLength !== "number" && tc.contextLength != null) {
+            row.contextLength = tc.contextLength;
+          }
+          if (typeof row.maxOutputTokens !== "number" && tc.maxOutputTokens != null) {
+            row.maxOutputTokens = tc.maxOutputTokens;
+          }
           row.latencyMs = tc.latencyMs >= 0 ? tc.latencyMs : "";
           row.toolSupport = tc.toolSupportChecked ? Boolean(tc.toolSupport) : "";
           row.toolSupportChecked = Boolean(tc.toolSupportChecked);
@@ -801,7 +817,7 @@ async function loadModelsWithMetadata({ forceRefresh = false } = {}) {
           row.toolSupportSummary = tc.toolSupportSummary || "";
           row.rateLimited = Boolean(tc.rateLimited);
           row.testedAt = tc.testedAt || "";
-          
+
           if (tc.rateLimited || tc.contextLength === "Rate Limited" || tc.maxOutputTokens === "Rate Limited") {
             row.liveTest = tc.isAvailable && tc.latencyMs >= 0 ? `${tc.latencyMs}ms (OK)` : "Rate Limited";
           } else if (tc.contextLength === "Error") {
@@ -1162,247 +1178,6 @@ const MAX_OUTPUT_TOKEN_PATTERNS = [
   /generate up to (\d+(?:\.\d+)?[kmb]?) (?:completion|output) tokens/i
 ];
 
-function buildContextProbePrompt(approximateTokens) {
-  // "hello " is approximately one token across BPE/SentencePiece tokenizers we target.
-  return "hello ".repeat(Math.max(1, Math.floor(approximateTokens)));
-}
-
-function buildContextProbeLadder(maxTokens) {
-  // Escalation ladder so small-context models resolve cheaply without ever
-  // sending huge prompts; only ≥maxTokens models pay full freight, once.
-  const ladder = [];
-  let step = 16384;
-  while (step < maxTokens) {
-    ladder.push(step);
-    step *= 4;
-  }
-  ladder.push(maxTokens);
-  return ladder;
-}
-
-// Patterns used to extract a context length from the prose of a build.nvidia.com model card.
-// Ordered most-specific-first; the first matching number wins.
-const CARD_CONTEXT_PATTERNS = [
-  /Context\s+Length\s*[:=]\s*(\d+(?:\.\d+)?\s*[kKmM])\b/,
-  /Context\s+(?:Window|Size)\s*[:=]\s*(\d+(?:\.\d+)?\s*[kKmM])\b/,
-  /maximum\s+context\s+(?:length|window|size)\s+(?:is|of)\s+(\d+(?:\.\d+)?\s*[kKmM])\b/i,
-  /(?:long[-\s]?context|context)\s+support\s+(?:up\s+to\s+)?(\d+(?:\.\d+)?\s*[kKmM])\s+tokens?\b/i,
-  /(\d+(?:\.\d+)?\s*[kKmM])\s+context\s+(?:length|window|size)\b/i,
-  /(\d+(?:\.\d+)?\s*[kKmM])\s+token\s+context\b/i,
-  /(?:supports?|provides?|with|up\s+to)\s+(?:up\s+to\s+)?(\d+(?:\.\d+)?\s*[kKmM])\s+(?:tokens?\s+(?:of\s+)?context|context\s+(?:length|window))/i
-];
-
-// Find the chunks in a Next.js-rendered page that look like the model's own
-// markdown body — they live inside self.__next_f.push([1,"..."]) and start
-// with a markdown heading or bold marker. Catalog/sidebar JSON chunks don't.
-function extractMarkdownBodyChunks(rawHtml) {
-  const html = String(rawHtml || "");
-  const opener = /self\.__next_f\.push\(\[1,"/g;
-  const bodies = [];
-  let openerMatch;
-
-  while ((openerMatch = opener.exec(html)) !== null) {
-    const start = openerMatch.index + openerMatch[0].length;
-    const closeIdx = html.indexOf('"])</script>', start);
-    if (closeIdx === -1) continue;
-
-    const content = html.slice(start, closeIdx);
-    if (content.startsWith("## ") || content.startsWith("# ") || content.startsWith("**")) {
-      bodies.push(content);
-    }
-  }
-
-  // Sort longest-first — model's own body is typically the largest markdown chunk on the page.
-  bodies.sort((a, b) => b.length - a.length);
-  return bodies;
-}
-
-// Walk markdown tables in the unescaped body looking for a column header that
-// names the context length, then return the value in the matching data cell.
-function extractContextLengthFromMarkdownTable(text) {
-  const lines = text.split("\n");
-  for (let i = 0; i < lines.length - 1; i += 1) {
-    const headerLine = lines[i];
-    if (!/Context\s+(?:Length|Window|Size)/i.test(headerLine) || !headerLine.includes("|")) {
-      continue;
-    }
-
-    // The next non-separator line should be the data row.
-    let dataRowIndex = -1;
-    for (let j = i + 1; j < Math.min(i + 5, lines.length); j += 1) {
-      const candidate = lines[j];
-      if (candidate.includes("|") && !/^[\s|:\-]+$/.test(candidate)) {
-        dataRowIndex = j;
-        break;
-      }
-    }
-    if (dataRowIndex === -1) continue;
-
-    const headerCells = headerLine.split("|").map((c) => c.trim());
-    const dataCells = lines[dataRowIndex].split("|").map((c) => c.trim());
-    for (let ci = 0; ci < headerCells.length; ci += 1) {
-      if (/Context\s+(?:Length|Window|Size)/i.test(headerCells[ci]) && ci < dataCells.length) {
-        const cell = dataCells[ci];
-        const match = cell.match(/(\d+(?:\.\d+)?\s*[kKmM])\b/);
-        if (match) {
-          const parsed = parseTokenCount(match[1]);
-          if (parsed) return parsed;
-        }
-      }
-    }
-  }
-  return null;
-}
-
-let cardCacheMap = null;
-
-function getCardCachePath() {
-  return path.join(__dirname, "model_card_cache.json");
-}
-
-function getCardCacheMap() {
-  if (cardCacheMap === null) {
-    try {
-      const file = getCardCachePath();
-      cardCacheMap = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : {};
-    } catch (e) {
-      console.warn("Failed to read model card cache, starting fresh:", e.message);
-      cardCacheMap = {};
-    }
-  }
-  return cardCacheMap;
-}
-
-function flushCardCache() {
-  if (cardCacheMap === null) return;
-  try {
-    fs.writeFileSync(getCardCachePath(), JSON.stringify(cardCacheMap, null, 2), "utf8");
-  } catch (e) {
-    console.warn("Failed to persist model card cache:", e.message);
-  }
-}
-
-function readCardCacheEntry(modelId) {
-  return getCardCacheMap()[modelId] || null;
-}
-
-function writeCardCacheEntry(modelId, entry) {
-  getCardCacheMap()[modelId] = entry;
-  flushCardCache();
-}
-
-function unescapeNextDataString(html) {
-  // The model-card body is embedded as a JSON-escaped string inside a Next.js bundle.
-  // Unescape just enough so our text-oriented regexes can match prose like
-  // "Context Length: 128K tokens" written across line breaks.
-  return String(html || "")
-    .replace(/\\r\\n/g, "\n")
-    .replace(/\\n/g, "\n")
-    .replace(/\\t/g, " ")
-    .replace(/\\"/g, '"');
-}
-
-function extractContextLengthFromCardHtml(html) {
-  // Restrict matching to markdown body chunks so we don't capture context
-  // numbers from sidebar promo cards / catalog listings of OTHER models.
-  const bodyChunks = extractMarkdownBodyChunks(html);
-  if (bodyChunks.length === 0) {
-    return null;
-  }
-
-  for (const chunk of bodyChunks) {
-    const text = unescapeNextDataString(chunk);
-
-    for (const pattern of CARD_CONTEXT_PATTERNS) {
-      const match = text.match(pattern);
-      if (match) {
-        const parsed = parseTokenCount(match[1]);
-        if (parsed) return parsed;
-      }
-    }
-
-    const tableMatch = extractContextLengthFromMarkdownTable(text);
-    if (tableMatch) return tableMatch;
-  }
-
-  return null;
-}
-
-async function fetchModelCardHtml(modelId) {
-  const { publisher, modelName } = splitModelId(modelId);
-  if (!publisher || !modelName) {
-    return null;
-  }
-
-  const candidates = [
-    `${MODEL_CARD_BASE_URL}/${encodeURIComponent(publisher)}/${encodeURIComponent(modelName)}/modelcard`,
-    `${MODEL_CARD_BASE_URL}/${encodeURIComponent(publisher)}/${encodeURIComponent(modelName)}`
-  ];
-
-  for (const url of candidates) {
-    const timeoutWrap = withTimeout(null, MODEL_CARD_FETCH_TIMEOUT_MS);
-    try {
-      const response = await fetch(url, {
-        method: "GET",
-        headers: { Accept: "text/html" },
-        signal: timeoutWrap.signal,
-        redirect: "follow"
-      });
-
-      if (!response.ok) {
-        continue;
-      }
-
-      const html = await response.text();
-      // Heuristic: the generic catalog landing page returned for unknown slugs is short
-      // and never mentions the word "Context"; skip it so we fall through to the next URL.
-      if (html.length < 80000 && !/[Cc]ontext/.test(html)) {
-        continue;
-      }
-
-      return { url, html };
-    } catch (e) {
-      // try next candidate
-    } finally {
-      timeoutWrap.clear();
-    }
-  }
-
-  return null;
-}
-
-async function getModelCardContext(modelId, { allowFetch = false, force = false } = {}) {
-  const cached = readCardCacheEntry(modelId);
-  const now = Date.now();
-
-  if (!force && cached && now - (cached.fetchedAt || 0) < MODEL_CARD_CACHE_TTL_MS) {
-    return cached;
-  }
-
-  if (!allowFetch) {
-    return cached || { cardContextLength: null, cardSlug: null, fetchedAt: 0 };
-  }
-
-  const fetched = await fetchModelCardHtml(modelId);
-  if (!fetched) {
-    const entry = {
-      cardContextLength: null,
-      cardSlug: null,
-      fetchedAt: now
-    };
-    writeCardCacheEntry(modelId, entry);
-    return entry;
-  }
-
-  const ctx = extractContextLengthFromCardHtml(fetched.html);
-  const entry = {
-    cardContextLength: ctx,
-    cardSlug: fetched.url,
-    fetchedAt: now
-  };
-  writeCardCacheEntry(modelId, entry);
-  return entry;
-}
 
 function extractFirstMatchingNumber(text, patterns) {
   const haystack = String(text || "");
@@ -1624,11 +1399,16 @@ app.get("/api/test-model", async (req, res) => {
   const url = `${API_BASE_URL}/chat/completions`;
   const headers = getRequestHeaders();
   const metadataTokenHints = getCachedMetadataTokenHints(modelId);
+  const spec = getModelSpec(modelId) || {};
 
   let latencyMs = -1;
   let isAvailable = false;
-  let contextLength = metadataTokenHints.contextLength;
-  let maxOutputTokens = metadataTokenHints.maxOutputTokens;
+  let contextLength =
+    typeof spec.contextLength === "number" ? spec.contextLength : metadataTokenHints.contextLength;
+  let maxOutputTokens =
+    typeof spec.maxOutputTokens === "number"
+      ? spec.maxOutputTokens
+      : metadataTokenHints.maxOutputTokens;
   let toolSupport = "";
   let toolSupportChecked = false;
   let toolSupportReason = "";
@@ -1694,10 +1474,10 @@ app.get("/api/test-model", async (req, res) => {
     }
 
     if (isAvailable) {
-      // Phase A: Output-limit probe — short prompt with an oversized max_tokens.
-      // Some servers also leak context-length info in this error (e.g. vLLM's max_model_len),
-      // so we opportunistically read both, but only via patterns that explicitly name the field.
-      if (typeof contextLength !== "number" || typeof maxOutputTokens !== "number") {
+      // Output-limit probe — only runs if model_specs.json didn't already
+      // supply maxOutputTokens. Sends a short prompt with an oversized
+      // max_tokens and parses the resulting error message.
+      if (typeof maxOutputTokens !== "number") {
         const outputProbe = await postProbeRequest(
           url,
           headers,
@@ -1715,86 +1495,18 @@ app.get("/api/test-model", async (req, res) => {
 
         if (outputProbe.rateLimited) {
           rateLimited = true;
-          if (contextLength == null) contextLength = "Rate Limited";
-          if (maxOutputTokens == null) maxOutputTokens = "Rate Limited";
+          maxOutputTokens = "Rate Limited";
         } else if (!outputProbe.response.ok) {
           const errorBody = outputProbe.bodyText || "";
-          if (typeof maxOutputTokens !== "number") {
-            const parsed = extractFirstMatchingNumber(errorBody, MAX_OUTPUT_TOKEN_PATTERNS);
-            if (parsed) maxOutputTokens = parsed;
-          }
-          if (typeof contextLength !== "number") {
-            const parsed = extractFirstMatchingNumber(errorBody, CONTEXT_LENGTH_PATTERNS);
-            if (parsed) contextLength = parsed;
-          }
+          const parsed = extractFirstMatchingNumber(errorBody, MAX_OUTPUT_TOKEN_PATTERNS);
+          if (parsed) maxOutputTokens = parsed;
         } else {
           // Server accepted max_tokens=99999999 — it does not enforce / report an output cap here.
-          if (maxOutputTokens == null) maxOutputTokens = "No Limit Reported";
+          maxOutputTokens = "No Limit Reported";
         }
       }
 
-      // Phase B: Context-window probe — escalating prompt sizes with max_tokens=1.
-      // Skip if Phase A already determined the context length, or the model is rate-limited.
-      // Ladder: stop at the first step that returns an explicit limit; otherwise grow.
-      if (!rateLimited && typeof contextLength !== "number" && contextLength !== "Rate Limited") {
-        const ladder = buildContextProbeLadder(CONTEXT_PROBE_PROMPT_TOKENS);
-        let lastAccepted = 0;
-
-        for (let i = 0; i < ladder.length; i += 1) {
-          const stepTokens = ladder[i];
-          try {
-            const contextProbe = await postProbeRequest(
-              url,
-              headers,
-              {
-                model: modelId,
-                messages: [
-                  { role: "user", content: buildContextProbePrompt(stepTokens) }
-                ],
-                max_tokens: 1
-              },
-              {
-                modelId,
-                purpose: `Context window (${stepTokens})`,
-                timeoutMs: CONTEXT_PROBE_TIMEOUT_MS
-              }
-            );
-
-            if (contextProbe.rateLimited) {
-              rateLimited = true;
-              contextLength = "Rate Limited";
-              break;
-            }
-
-            if (!contextProbe.response.ok) {
-              const errorBody = contextProbe.bodyText || "";
-              const parsed = extractFirstMatchingNumber(errorBody, CONTEXT_LENGTH_PATTERNS);
-              if (parsed) {
-                contextLength = parsed;
-              } else {
-                console.warn(
-                  `Context probe error did not match known patterns for ${modelId} at ${stepTokens}: ${summarizeErrorText(errorBody)}`
-                );
-              }
-              break;
-            }
-
-            // Server accepted this prompt — context window is at least stepTokens. Try larger.
-            lastAccepted = stepTokens;
-          } catch (probeError) {
-            console.warn(
-              `Context probe failed for ${modelId} at ${stepTokens}: ${probeError.message}`
-            );
-            break;
-          }
-        }
-
-        if (typeof contextLength !== "number" && contextLength == null && lastAccepted > 0) {
-          contextLength = `>=${lastAccepted}`;
-        }
-      }
-
-      // Phase C: Tool/function-calling support.
+      // Tool/function-calling support.
       if (!rateLimited) {
         const toolProbeResult = await probeToolSupport(url, headers, modelId);
         rateLimited = toolProbeResult.rateLimited;
@@ -1826,15 +1538,6 @@ app.get("/api/test-model", async (req, res) => {
 
   const fallbackLabel = isAvailable ? "Unknown" : unavailableLabel;
 
-  // Refresh the model card for this single model (best-effort, never fails the test).
-  let cardContextLength = null;
-  try {
-    const cardData = await getModelCardContext(modelId, { allowFetch: true });
-    cardContextLength = cardData ? cardData.cardContextLength : null;
-  } catch (e) {
-    console.warn(`Model card fetch failed for ${modelId}: ${e.message}`);
-  }
-
   const result = {
     modelId,
     latencyMs,
@@ -1842,7 +1545,6 @@ app.get("/api/test-model", async (req, res) => {
     rateLimited,
     contextLength: contextLength || fallbackLabel,
     maxOutputTokens: maxOutputTokens || fallbackLabel,
-    cardContextLength,
     toolSupport,
     toolSupportChecked,
     toolSupportReason,
@@ -1853,38 +1555,6 @@ app.get("/api/test-model", async (req, res) => {
   persistTestResult(modelId, result);
 
   res.json(result);
-});
-
-app.post("/api/refresh-cards", async (_req, res) => {
-  try {
-    const payload = await loadModelsWithMetadata({ forceRefresh: false });
-    const rows = payload.rows || [];
-    let success = 0;
-    let failed = 0;
-
-    await mapWithConcurrency(rows, MODEL_CARD_CONCURRENCY, async (row) => {
-      try {
-        const data = await getModelCardContext(row.modelId, {
-          allowFetch: true,
-          force: true
-        });
-        if (data && data.cardContextLength != null) {
-          success += 1;
-        } else {
-          failed += 1;
-        }
-      } catch (err) {
-        failed += 1;
-        console.warn(`Card refresh failed for ${row.modelId}: ${err.message}`);
-      }
-    });
-
-    invalidateCachedPayload();
-    res.json({ success, failed, total: rows.length });
-  } catch (err) {
-    console.error("Failed to refresh model cards:", err);
-    res.status(500).json({ error: err.message });
-  }
 });
 
 app.listen(PORT, () => {
