@@ -1680,14 +1680,17 @@ app.get("/api/specs-meta", (_req, res) => {
 
 app.listen(PORT, () => {
   const appUrl = `http://localhost:${PORT}`;
-  const hasKey = Boolean(getApiKey());
-
   console.log(`nvidia-model-info server started at ${appUrl}`);
-  console.log(
-    hasKey
-      ? `Using API key from environment variable ${API_KEY_ENV_NAME}`
-      : `Environment variable ${API_KEY_ENV_NAME} is not set. Requests will continue without Authorization.`
-  );
-
+  if (getApiKey()) {
+    console.log(`Using API key from environment variable ${API_KEY_ENV_NAME}`);
+  } else {
+    console.warn(
+      `WARNING: environment variable ${API_KEY_ENV_NAME} is not set.\n` +
+      `The dashboard will load model metadata, but every Live Ping / Test Displayed Models\n` +
+      `request will return 401 from NVIDIA because /v1/chat/completions requires auth.\n` +
+      `Set it before launching to enable live probing:\n` +
+      `  export ${API_KEY_ENV_NAME}="your_nvidia_api_key"  &&  ./start.sh`
+    );
+  }
   launchBrowser(appUrl);
 });

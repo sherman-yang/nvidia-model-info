@@ -16,6 +16,16 @@
         Right-click a model row to view copyable API usage examples.</p>
     </header>
 
+    <section id="api-key-banner" class="api-key-banner" hidden>
+      <strong>NVIDIA_API_KEY is not set.</strong>
+      The dashboard can load the catalog and fetch model cards, but Live Ping and
+      Test Displayed Models will all fail with <code>401</code>. To enable live
+      probing, run in your terminal:
+      <pre>export NVIDIA_API_KEY="your_nvidia_api_key"
+./start.sh</pre>
+      then reload this page.
+    </section>
+
     <section class="controls">
       <label>
         Search

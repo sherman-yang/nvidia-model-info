@@ -829,6 +829,9 @@ async function loadData(forceRefresh = false) {
     state.duplicateModelCount = Number(payload.duplicateModelCount || 0);
     state.apiKeyConfigured = Boolean(payload.apiKeyConfigured);
 
+    const banner = document.getElementById("api-key-banner");
+    if (banner) banner.hidden = state.apiKeyConfigured;
+
     // Reconstruct the visual testState from the loaded string values
     state.rows.forEach(row => {
       row.toolSupportChecked = row.toolSupportChecked === true;
