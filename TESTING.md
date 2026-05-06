@@ -38,6 +38,7 @@ export NVIDIA_API_KEY="your_actual_key"
 
 - Enter `llama` in the search box and verify the table filters immediately.
 - Type `agentic` (or `MoE`, `coding`) in the search box and verify only rows whose `Labels` cell contains that tag remain.
+- Type `agentic moe coding` (space-separated). Verify the table now contains rows with any of those labels (OR semantics across terms), not the empty intersection.
 - Toggle `Exclude Inactive/Error` and verify rows with `Error` or `Inactive` live results disappear.
 - Toggle `Tool Support` and verify only rows with `Tool Support = true` remain visible.
 - Click `Model ID`, `Labels`, `Context Limit`, and `Tool Support` headers and verify sorting changes direction on repeated clicks.

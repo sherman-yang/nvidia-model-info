@@ -39,7 +39,7 @@ The default URL is `http://localhost:4920`.
 
 - Browse: Scroll horizontally to inspect all flattened metadata columns.
 - Sort: Click any column header to toggle ascending or descending order.
-- Search: Use the search box to filter rows by substring across all displayed values.
+- Search: Filter rows by substring across all displayed values. Multiple terms separated by whitespace use OR — a row matches when any term appears in any column. Example: `agentic moe multimodal`.
 - Exclude Inactive/Error: Hides rows whose live test resolved to `Error` or `Inactive`.
 - Tool Support: Shows only rows whose tool calling probe completed and returned `true`.
 

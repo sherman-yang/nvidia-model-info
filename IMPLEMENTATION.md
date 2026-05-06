@@ -151,7 +151,7 @@ The frontend:
 
 ### Filtering
 
-- Search applies a substring match across all displayed row values.
+- Search splits the input on whitespace and applies OR semantics: a row matches when any term appears as a substring in any displayed cell. Empty input keeps every row.
 - `Exclude Inactive/Error` hides rows whose live result is `Error` or `Inactive`.
 - `Tool Support` hides every row except those with `toolSupport === true`.
 

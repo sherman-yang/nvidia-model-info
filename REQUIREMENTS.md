@@ -17,7 +17,7 @@ Provide a local dashboard for inspecting the free model catalog on `build.nvidia
 ### Table Behavior
 
 - Support sorting on every displayed column.
-- Support global text search across row values.
+- Support global text search across row values. Whitespace-separated terms must use OR semantics — a row matches when any term is found as a substring in any displayed cell.
 - Keep these columns pinned on the left:
   - `Live Ping`
   - `Model ID`
