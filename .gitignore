@@ -5,5 +5,4 @@ npm-debug.log*
 test-results
 playwright-report
 model_limits_cache.json
-model_card_cache.json
 .claude/
