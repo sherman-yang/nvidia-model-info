@@ -90,6 +90,7 @@ Optional backend environment variables:
 - `POPULATE_TIMEOUT_MS` default `20000` — per-request timeout for populate fetches
 - `NGC_BASE` default `https://api.ngc.nvidia.com/v2` — base URL for the NGC catalog API
 - `BUILD_ORG` default `qc69jvmznzxy` — orgName for the build.nvidia.com tenant
+- `PROBE_TRACE` set to `1` to log a `[probe-trace <ISO>] <purpose> → <modelId>` line for every NVIDIA probe. Useful for verifying the rate-limit pacing.
 
 ## CLI
 

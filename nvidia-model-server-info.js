@@ -226,6 +226,9 @@ async function postProbeRequest(url, headers, payload, { modelId, purpose, timeo
   while (true) {
     await reserveProbeSlot();
     const timeoutWrap = withTimeout(null, timeoutMs);
+    if (process.env.PROBE_TRACE === "1") {
+      console.log(`[probe-trace ${new Date().toISOString()}] ${purpose} → ${modelId} (attempt ${attempt + 1})`);
+    }
 
     try {
       const response = await fetch(url, {
