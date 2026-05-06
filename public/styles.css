@@ -150,6 +150,40 @@ body {
   color: var(--muted);
 }
 
+.api-key-banner {
+  margin: 12px 0 4px;
+  padding: 10px 14px;
+  background: #fff3cd;
+  border: 1px solid #f3c969;
+  border-left: 4px solid #c89500;
+  border-radius: 4px;
+  color: #5a4a00;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.api-key-banner[hidden] {
+  display: none;
+}
+
+.api-key-banner code {
+  background: rgba(0, 0, 0, 0.06);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.api-key-banner pre {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
 .controls {
   display: flex;
   flex-wrap: wrap;
