@@ -86,11 +86,11 @@ Click `Test Displayed Models` to batch-test the rows that are currently displaye
 
 ## Row Usage Popover
 
-Right-click any model row to open a usage popover with a copyable cURL example.
+Right-click any model row to open a usage popover containing:
 
-The snippet always references `NVIDIA_API_KEY` and is generated for that specific model ID.
-
-The popover does not include a Claude Code command for the hosted API. On `2026-04-14`, the hosted endpoint `https://integrate.api.nvidia.com/v1/messages` returned `404 page not found`, so the Anthropic-compatible path required by Claude Code is not currently available there.
+- **Model card link** — clickable URL to that model's page on `build.nvidia.com` (`https://build.nvidia.com/<publisher>/<model>/modelcard`).
+- **Use case** — the publisher's stated use-case sentence parsed from the model card. Hidden when the spec entry has no use case (some models genuinely don't state one).
+- **cURL snippet** — ready to paste, references the `NVIDIA_API_KEY` environment variable, target endpoint is `https://integrate.api.nvidia.com/v1/chat/completions`, body uses `max_tokens = min(spec maxOutputTokens, 512)`.
 
 ## Force Refresh Data
 

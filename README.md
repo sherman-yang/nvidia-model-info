@@ -1,107 +1,173 @@
 # NVIDIA Model Info Dashboard
 
-Local dashboard for exploring the free models exposed through `build.nvidia.com`.
+A local web dashboard for the free NVIDIA NIM models exposed at
+[build.nvidia.com](https://build.nvidia.com).
 
-The app fetches the active model catalog, pulls each endpoint's model card from the public NGC catalog API to populate `Context Limit` and `Labels`, flattens every metadata field into sortable table columns, and lets you probe live capabilities such as latency, max output tokens, and tool calling support.
+It pulls the live model catalog from NVIDIA's API, enriches every entry with
+the publisher-stated `Context Limit` and `Labels` parsed from each model card,
+and lets you live-probe latency, output-token limits, and tool-calling support
+from the UI — all paced by a single global rate limiter that holds at exactly
+NVIDIA's 40 RPM free-tier cap.
 
-## Highlights
+## Features
 
-- Shows only models that appear active and usable.
-- Removes duplicate model IDs before metadata loading and rendering.
-- Fetches model metadata for every listed model and renders it as a sortable table.
-- Keeps the most useful columns pinned on the left: `Live Ping`, `Model ID`, `Publisher`, `Labels`, `Context Limit`, `Max Output`, `Latency (ms)`, `Tool Support`, and `Tested At`.
-- `Context Limit` and `Labels` are read from `model_specs.json`, populated from `build.nvidia.com` model cards via the public NGC catalog API. See [docs/MODEL_CARD_FETCH.md](docs/MODEL_CARD_FETCH.md).
-- Supports global search, `Exclude Inactive/Error`, and `Tool Support` filtering.
-- Probes live model behavior from the UI:
-  - `Ping` re-tests one model.
-  - `Test Displayed Models` tests displayed models that do not already have a complete live result.
-  - `Shift + Click` on `Test Displayed Models` forces a full re-test of all displayed rows.
-  - Backend probe requests are globally paced and automatically back off on `429 Too Many Requests`.
-  - Tool support probing tries multiple request variants, classifies explicit unsupported-tool responses, and retries accepted-but-truncated responses with a larger completion budget before giving up.
-- Right-click any row to open a copyable cURL API example for that model.
-- On first load, when `model_specs.json` is empty, the dashboard automatically runs `Force Refresh Data` so the user lands on a fully populated table.
-- `Force Refresh Data` drops all saved test results, clears backend caches, reloads the model list from NVIDIA, and re-pulls every model card from `build.nvidia.com`.
+- **Full catalog** — fetches `/v1/models`, flattens metadata into a sortable
+  table, removes duplicates, hides retired or disabled rows.
+- **Pinned columns** — `Live Ping`, `Model ID`, `Publisher`, `Labels`,
+  `Context Limit`, `Max Output`, `Latency (ms)`, `Tool Support`, `Tested At`.
+- **Search & filter** — substring search across every cell, plus checkboxes
+  for "Exclude Inactive/Error" and "Tool Support only".
+- **Live probing** — `Ping` per row or `Test Displayed Models` for a batch.
+  Probes detect availability + latency, the output-token limit, and tool
+  calling support (multiple request shapes, with retry on length-cutoff).
+- **Single 40 RPM rate limiter** — every NVIDIA call goes through one global
+  reservation gate (`60000 / PROBE_RATE_LIMIT_RPM` ms minimum gap). 132-model
+  full-batch run: 496 probes, peak 60-second window = 40 (= cap), zero
+  violations. See [TESTING.md](TESTING.md) for the methodology.
+- **Model-card backed specs** — `Context Limit`, `Labels`, and the right-click
+  popover's `Use case` come from
+  [`model_specs.json`](model_specs.json), regenerated from the public NGC
+  catalog API. See [docs/MODEL_CARD_FETCH.md](docs/MODEL_CARD_FETCH.md).
+- **First-run automation** — when `model_specs.json` is empty, the dashboard
+  fires `Force Refresh Data` automatically so the user lands on a populated
+  table with no clicks.
+- **Right-click usage examples** — copyable cURL snippet, link to the
+  build.nvidia.com model card, and the publisher's stated use case.
+- **Honest no-key fallback** — without `NVIDIA_API_KEY` the dashboard still
+  loads the catalog and model cards (NGC is unauthenticated), but Live Ping /
+  Test Displayed Models are disabled and an in-page banner tells the user how
+  to set the key.
 
-## Quick Start
-
-1. Install [Node.js](https://nodejs.org/) 18 or later.
-2. Export your NVIDIA key in the shell:
+## Quick start
 
 ```bash
-export NVIDIA_API_KEY="your_nvidia_api_key"
-```
+# 1. Install Node.js 18+
+node --version
 
-3. Start the app:
+# 2. Get an API key from build.nvidia.com → "Get API Key"
+export NVIDIA_API_KEY="nvapi-..."
 
-```bash
+# 3. Run
+git clone <this-repo>
+cd nvidia-model-info
 ./start.sh
 ```
 
-4. The server starts on `http://localhost:4920` by default and attempts to open the dashboard in your default browser.
+The server listens on `http://localhost:4920` and tries to open it in your
+default browser. On the very first launch the dashboard auto-populates
+`model_specs.json` from build.nvidia.com (~30 s) before the table fills in.
 
-## Main Controls
+## Controls
 
 | Control | Behavior |
 | --- | --- |
-| Search | Filters rows by substring match across all visible values. |
+| Search | Substring match across every visible cell. |
 | Exclude Inactive/Error | Hides rows whose live test state is `Error` or `Inactive`. |
-| Tool Support | Shows only rows that have been tested and confirmed to support tool calling. |
-| Ping | Re-tests one model and updates cached results. |
-| Test Displayed Models | Tests displayed models that are still missing a complete live test result. |
-| Shift + Click on Test Displayed Models | Forces a re-test of every displayed row. |
+| Tool Support | Keeps only rows confirmed to return tool calls. |
+| Ping / Re-test | Single-row live probe. Disabled without an API key. |
+| Test Displayed Models | Batch-tests displayed rows missing a complete result. Disabled without an API key. |
+| Shift + Click on Test Displayed Models | Force re-test every displayed row. |
 | Stop Testing | Cancels the running batch test. |
-| Force Refresh Data | Clears all saved test data and backend cache, fetches a fresh model list, and re-pulls every model card from `build.nvidia.com`. Reloads the page when done. |
+| Force Refresh Data | Resets the probe cache, reloads `/v1/models`, re-pulls every model card from build.nvidia.com, then reloads the page. Always works (no API key needed). |
 
-## What The Live Test Actually Detects
+## What a live test actually does
 
-Each live test can perform up to three NVIDIA API requests:
+`GET /api/test-model?model=<id>` performs up to three sequential probes:
 
-1. A small chat completion request to confirm availability and measure latency.
-2. An oversized `max_tokens` probe to detect the output-token limit. Skipped when `model_specs.json` already provides `maxOutputTokens` for this model. `Context Limit` is never probed live — it always comes from `model_specs.json`.
-3. An adaptive tool-calling probe that tries multiple compatible request shapes and can retry truncated accepted responses with a larger `max_tokens` value.
+1. **Availability + latency** — minimal `chat/completions` call, status 200
+   means the model is up. Latency measured server-side.
+2. **Output-token limit** — sends `max_tokens: 99999999` and parses the
+   resulting error for the cap. Skipped when `model_specs.json` already
+   supplies `maxOutputTokens`. `Context Limit` is never probed live; it comes
+   from `model_specs.json` only.
+3. **Tool support** — tries `tools` only, `tool_choice: "auto"`, forced
+   `tool_choice`, and legacy `functions`/`function_call` in turn. Marks
+   `true` only when a tool call is observed; marks `false` only on explicit
+   unsupported errors or when accepted requests never emit a tool call (with
+   one length-cutoff retry). Stays blank on rate-limit / timeout / server
+   error so the row remains retryable.
 
-`Tool Support` is intentionally three-state:
+The single global rate limiter holds the gap between any two outgoing probes
+to ≥ `60000 / PROBE_RATE_LIMIT_RPM` ms (1500 ms at the default 40 RPM). On
+`429 Too Many Requests` it honors NVIDIA's `Retry-After`, otherwise applies an
+exponential 10s/20s/40s backoff. The backoff also shifts the global slot, so
+every queued probe pauses together.
 
-- blank: not tested yet
-- `true`: tool calling was observed
-- `false`: the probe completed and concluded either that tool fields are explicitly unsupported or that accepted requests still never emitted tool calls
+## Architecture
 
-If NVIDIA rate-limits a probe, the row shows `Rate Limited` instead of being cached as a normal failure. Inconclusive tool support probes stay blank so they can be retried later. Hover the `Tool Support` cell to inspect the saved reason summary for `false` or inconclusive rows.
+```
+┌──────────────────────────┐    ┌────────────────────────────┐
+│  Browser (public/app.js) │◀──▶│  Express server            │
+│  - sortable table        │    │  (nvidia-model-server-info)│
+│  - search & filters      │    │  - /api/models-with-meta   │
+│  - right-click popover   │    │  - /api/test-model         │
+│  - batch test runner     │    │  - /api/populate-specs     │
+└──────────────────────────┘    │  - reserveProbeSlot ↓      │
+                                └────┬───────────────────────┘
+                                     │ ≤40 RPM (1500ms gap)
+                                     ▼
+                  ┌─────────────────────────────────────┐
+                  │  NVIDIA Integrate API               │
+                  │  - /v1/models   (no auth)           │
+                  │  - /v1/chat/completions  (auth req) │
+                  └─────────────────────────────────────┘
 
-The right-click popover intentionally keeps only the hosted OpenAI-compatible cURL example. On `2026-04-14`, `https://integrate.api.nvidia.com/v1/messages` returned `404`, so the hosted endpoint used by this dashboard does not currently expose the Anthropic-compatible path that Claude Code requires.
+                  ┌─────────────────────────────────────┐
+                  │  NGC Catalog API (no auth)          │
+                  │  - /v2/search/catalog/resources/    │
+                  │    ENDPOINT                         │
+                  │  - /v2/endpoints/{org}/{name}       │
+                  └─────────────────────────────────────┘
+```
+
+`model_specs.json` is the persisted output of populating from the NGC catalog
+and is committed to the repo.
 
 ## Configuration
 
-The runtime reads the API key only from `NVIDIA_API_KEY`. It does not use `.env`.
+The API key is read **only** from the `NVIDIA_API_KEY` environment variable.
+`.env` files are intentionally not loaded — keep secrets in your shell.
 
-Optional backend environment variables:
-
-- `PORT` default `4920`
-- `MAX_CONCURRENCY` default `12`
-- `REQUEST_TIMEOUT_MS` default `20000`
-- `CACHE_TTL_MS` default `300000`
-- `PROBE_RATE_LIMIT_RPM` default `40` — the only knob that controls the rate of NVIDIA probes. `60000 / value` is the minimum gap between any two outgoing requests. NVIDIA's free-tier cap is 40 RPM; matching it gives full throughput. Lower it if you start seeing 429s.
-- `PROBE_MIN_INTERVAL_MS` default derived from `PROBE_RATE_LIMIT_RPM` (= `1500ms` at 40 RPM)
-- `PROBE_TIMEOUT_MS` default `15000`
-- `TOOL_SUPPORT_TIMEOUT_MS` default `25000`
-- `PROBE_MAX_429_RETRIES` default `2`
-- `PROBE_429_BACKOFF_MS` default `10000`
-- `POPULATE_CONCURRENCY` default `6` — concurrent model-card fetches during populate
-- `POPULATE_TIMEOUT_MS` default `20000` — per-request timeout for populate fetches
-- `NGC_BASE` default `https://api.ngc.nvidia.com/v2` — base URL for the NGC catalog API
-- `BUILD_ORG` default `qc69jvmznzxy` — orgName for the build.nvidia.com tenant
-- `PROBE_TRACE` set to `1` to log a `[probe-trace <ISO>] <purpose> → <modelId>` line for every NVIDIA probe. Useful for verifying the rate-limit pacing.
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `NVIDIA_API_KEY` | _(required for live probes)_ | Without it, catalog + populate still work; live probing is disabled. |
+| `PORT` | `4920` | |
+| `MAX_CONCURRENCY` | `12` | Parallel metadata fetches when loading the catalog. |
+| `REQUEST_TIMEOUT_MS` | `20000` | Generic HTTP timeout. |
+| `CACHE_TTL_MS` | `300000` | In-memory model-table cache TTL. |
+| `PROBE_RATE_LIMIT_RPM` | `40` | The single rate-limit knob. `60000 / value` is the minimum gap between any two NVIDIA probes. Lower it only if you see 429s. |
+| `PROBE_MIN_INTERVAL_MS` | derived | Override the gap directly if you need to. |
+| `PROBE_TIMEOUT_MS` | `15000` | Per-probe timeout. |
+| `TOOL_SUPPORT_TIMEOUT_MS` | `25000` | Per tool-support probe timeout. |
+| `PROBE_MAX_429_RETRIES` | `2` | In-place retries on 429. |
+| `PROBE_429_BACKOFF_MS` | `10000` | Base backoff (doubled per retry, overridden by `Retry-After`). |
+| `POPULATE_CONCURRENCY` | `6` | Concurrent model-card fetches during populate. |
+| `POPULATE_TIMEOUT_MS` | `20000` | Per-request timeout for populate fetches. |
+| `NGC_BASE` | `https://api.ngc.nvidia.com/v2` | NGC catalog API base. |
+| `BUILD_ORG` | `qc69jvmznzxy` | orgName for the build.nvidia.com tenant. |
+| `PROBE_TRACE` | _(off)_ | Set to `1` to log every probe with a timestamp; used for verifying rate-limit pacing. |
 
 ## CLI
 
-- `npm start` — launch the dashboard server.
-- `npm run check` — syntax-check the server and frontend JavaScript.
-- `npm run populate-specs` — re-pull every model card from build.nvidia.com and rewrite `model_specs.json`. Same effect as the in-app `Force Refresh Data`, useful in CI / cron / one-off workflows.
+```bash
+npm start               # launch the dashboard server
+npm run check           # syntax-check server and frontend JavaScript
+npm run populate-specs  # rebuild model_specs.json from build.nvidia.com
+```
 
-## Repository Docs
+`populate-specs` does the same thing as the in-app `Force Refresh Data`
+button. Useful in CI, cron, or for headless environments.
 
-- [USAGE.md](USAGE.md)
-- [REQUIREMENTS.md](REQUIREMENTS.md)
-- [IMPLEMENTATION.md](IMPLEMENTATION.md)
-- [TESTING.md](TESTING.md)
-- [docs/MODEL_CARD_FETCH.md](docs/MODEL_CARD_FETCH.md)
+## Documentation
+
+- [USAGE.md](USAGE.md) — user guide.
+- [IMPLEMENTATION.md](IMPLEMENTATION.md) — architecture, data flow, file map.
+- [REQUIREMENTS.md](REQUIREMENTS.md) — functional and technical requirements.
+- [TESTING.md](TESTING.md) — manual test plan, including rate-limit verification.
+- [docs/MODEL_CARD_FETCH.md](docs/MODEL_CARD_FETCH.md) — how `model_specs.json`
+  is generated, the NGC catalog API endpoints used, slug-mapping quirks, and
+  the regex pattern set with worked examples.
+
+## License
+
+MIT. See [package.json](package.json).

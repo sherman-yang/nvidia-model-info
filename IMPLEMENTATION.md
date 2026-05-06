@@ -179,9 +179,13 @@ Rows that hit NVIDIA rate limits show `Rate Limited` in the live probe output an
 
 ### Usage Popover
 
-The right-click popover keeps only the hosted cURL example for `https://integrate.api.nvidia.com/v1/chat/completions`.
+The right-click popover renders three things, in order:
 
-It intentionally omits a Claude Code command because the hosted endpoint used by this dashboard did not expose `/v1/messages` when verified on `2026-04-14`. Claude Code requires an Anthropic-compatible `/v1/messages` backend, so showing that command here would be misleading.
+1. A clickable link to the model's `build.nvidia.com` model card (opens in a new tab).
+2. The publisher's stated use case (`useCase`) parsed from the model card and stored in `model_specs.json`. Hidden when no use case is available.
+3. A copyable cURL snippet for `https://integrate.api.nvidia.com/v1/chat/completions`. The snippet references `NVIDIA_API_KEY` and uses `max_tokens = min(spec maxOutputTokens, 512)`.
+
+`useCase` is added to the row by `loadModelsWithMetadata` but kept out of the table by adding it to the `hiddenFields` set in `buildColumns`.
 
 ## Startup Flow
 
