@@ -65,9 +65,8 @@ Click `Test Displayed Models` to batch-test the rows that are currently displaye
 
 - Rows that already have latency, numeric token limits, and a completed tool support probe are skipped by default.
 - Hold `Shift` while clicking to force a re-test of every displayed row.
-- The batch runner waits 8 seconds between models.
-- If a test does not return numeric token limits, the frontend waits another 8 seconds and retries that model once.
-- The backend also paces individual probe requests globally so the NVIDIA free-tier 40 RPM limit is less likely to be exceeded.
+- There is no artificial delay between models. Every NVIDIA call (availability, output-limit, tool-support probes) goes through a single global rate limiter on the backend: minimum gap = `60000 / PROBE_RATE_LIMIT_RPM` ms, defaulting to 1500 ms (= NVIDIA's free-tier 40 RPM cap). The batch button just fires models in order and lets the limiter pace everything.
+- If a test does not return numeric token limits or comes back rate-limited, that model is retried once immediately — the rate limiter holds the retry's first probe until 1500 ms has passed since the previous one.
 - Click the button again while a batch is running to stop it.
 
 ## Understanding The Key Columns

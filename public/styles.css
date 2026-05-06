@@ -419,6 +419,16 @@ button:hover {
   font-size: 13px;
 }
 
+.usage-meta[hidden] {
+  display: none;
+}
+
+.usage-meta a {
+  color: var(--accent, #2563eb);
+  text-decoration: underline;
+  word-break: break-all;
+}
+
 .usage-block {
   border: 1px solid var(--block-border);
   border-radius: 8px;
