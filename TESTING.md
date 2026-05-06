@@ -23,19 +23,31 @@ export NVIDIA_API_KEY="your_actual_key"
 - Verify only active and usable models are shown.
 - Verify repeated `Model ID` values are not rendered as duplicate rows.
 - Verify the table contains flattened metadata columns in addition to the pinned columns.
+- Verify the pinned columns include `Labels` between `Publisher` and `Context Limit`.
+
+### First-Time Setup (Empty model_specs.json)
+
+- With the server stopped, replace `model_specs.json` with `{}` (or delete it).
+- Start the server and open the dashboard.
+- Verify the status bar reads `First-time setup: loading model list and refreshing model cards from build.nvidia.com…`.
+- Verify the progress bar shows `Refreshing model cards: N/M (…%, context found: K) — <publisher>/<model>` and updates as work proceeds.
+- Verify the page reloads automatically when the populate finishes.
+- After reload, verify rows have `Context Limit` and `Labels` populated where the publisher's card supplies them.
 
 ### Sorting And Filtering
 
 - Enter `llama` in the search box and verify the table filters immediately.
+- Type `agentic` (or `MoE`, `coding`) in the search box and verify only rows whose `Labels` cell contains that tag remain.
 - Toggle `Exclude Inactive/Error` and verify rows with `Error` or `Inactive` live results disappear.
 - Toggle `Tool Support` and verify only rows with `Tool Support = true` remain visible.
-- Click `Model ID`, `Context Limit`, and `Tool Support` headers and verify sorting changes direction on repeated clicks.
+- Click `Model ID`, `Labels`, `Context Limit`, and `Tool Support` headers and verify sorting changes direction on repeated clicks.
 
 ### Single-Row Testing
 
 - Click `Ping` on an untested row.
 - Verify the row clears immediately into a testing state.
-- Verify latency, context limit, max output, and tested timestamp are updated after the request.
+- Verify latency, max output, and tested timestamp are updated after the request.
+- Verify `Context Limit` is unchanged by the ping — it comes from `model_specs.json` only and is never probed.
 - Verify `Tool Support` is:
   - blank before test completion
   - `true` when tool calls are observed
@@ -65,7 +77,15 @@ export NVIDIA_API_KEY="your_actual_key"
 - Click `Force Refresh Data`.
 - Verify the table clears immediately.
 - Verify any running batch test is stopped.
-- Verify the next load returns fresh rows with no persisted live test values.
+- Verify the populate progress bar appears and updates while model cards are being fetched.
+- Verify the page reloads automatically when the populate finishes.
+- After reload, verify the next render returns fresh rows with no persisted live test values, and `Context Limit` / `Labels` reflect the latest publisher data.
+
+### CLI Populate
+
+- Run `npm run populate-specs` (or `node populate_specs.js`).
+- Verify it writes to `model_specs.json` with sensible counts in stdout (`contextLength populated: K/N`).
+- Verify the running server picks up the new file without restart on the next list refresh (mtime hot-reload).
 
 ### Usage Popover
 

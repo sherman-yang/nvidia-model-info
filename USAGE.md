@@ -52,8 +52,10 @@ Click `Ping` on a row to re-test that model.
 The backend probes:
 
 1. Availability and latency
-2. Context limit and max output limit
+2. Output-token limit (only when `model_specs.json` does not already provide `maxOutputTokens` for this model)
 3. Tool calling support
+
+`Context Limit` is never re-probed live — it always comes from `model_specs.json`. To refresh that value, use `Force Refresh Data` (or `npm run populate-specs`).
 
 The row is cleared to an in-progress state before the request completes.
 
@@ -70,8 +72,9 @@ Click `Test Displayed Models` to batch-test the rows that are currently displaye
 
 ## Understanding The Key Columns
 
-- `Context Limit`: Comes from metadata when available, otherwise from live probing. If still unknown, it shows `Unknown`, `Inactive`, `Error`, or `No Limit Reported`.
-- `Max Output`: Same detection flow as `Context Limit`.
+- `Labels`: Plain capability tags pulled from the build.nvidia.com model card (for example `MoE`, `agentic`, `coding`, `Multimodal`, `Tool Use`). Sortable and searchable through the global filter. System labels containing `:` are stripped.
+- `Context Limit`: Comes from `model_specs.json`, populated from the publisher's model card on `build.nvidia.com`. Shows `Not Tested` when no spec entry exists for the model. Refresh via `Force Refresh Data`.
+- `Max Output`: Comes from `model_specs.json` when available, otherwise filled in by a live probe. Falls back to `Unknown`, `Inactive`, `Error`, or `No Limit Reported` when a live probe runs but cannot resolve a numeric value.
 - `Latency (ms)`: Populated only after a successful live probe.
 - `Tool Support`:
   - blank = not tested yet
@@ -92,17 +95,22 @@ The popover does not include a Claude Code command for the hosted API. On `2026-
 
 ## Force Refresh Data
 
-`Force Refresh Data` is a hard reset for the running dashboard state.
+`Force Refresh Data` is a hard reset that also re-pulls model cards. It is the only UI action that brings new data in from `build.nvidia.com` and is the only way `Context Limit` and `Labels` get updated for newly added models.
 
-It does all of the following before reloading:
+It does all of the following:
 
 - clears the visible table
 - stops any running batch test
 - deletes all saved live test results from `model_limits_cache.json`
 - clears the backend in-memory cache
 - fetches a fresh model list and model metadata from NVIDIA
+- re-pulls every endpoint's model card from the public NGC catalog API and rewrites `model_specs.json`
+- shows a progress bar while the populate runs (`Refreshing model cards: …`)
+- reloads the page when finished so the table picks up the new specs
 
-Use this when you want to discard all current test results and start from a clean state.
+On the very first load, when `model_specs.json` is empty, the dashboard fires this same flow automatically — no clicks required. The status bar reads `First-time setup: loading model list and refreshing model cards from build.nvidia.com…` while it runs.
+
+The same refresh can also be triggered from the command line: `npm run populate-specs` (or `node populate_specs.js`). Useful for CI, cron, or one-off workflows.
 
 ## Troubleshooting
 
@@ -110,8 +118,9 @@ Use this when you want to discard all current test results and start from a clea
 - Port already in use: set another port, for example `PORT=5000 ./start.sh`.
 - `Not Tested` or blank `Tool Support`: the row has not completed a live test yet.
 - blank `Tool Support` with a tooltip reason like `Rate Limited`, `Backend Error`, or `Timeout`: the tool probe ran but stayed inconclusive, so the row remains retryable.
-- `Unknown`: the model responded, but the token limit probe did not produce a numeric limit.
-- metadata-backed numeric `Context Limit` or `Max Output`: the dashboard found a numeric value in model metadata and reused it instead of depending only on live error scraping.
+- `Unknown`: the model responded, but the output-token probe did not produce a numeric limit.
+- `Not Tested` in `Context Limit`: no entry exists in `model_specs.json` for this model. Run `Force Refresh Data` (or `npm run populate-specs`) to repopulate.
+- numeric `Context Limit` value: pulled from `model_specs.json` (publisher's model card on build.nvidia.com).
 - `No Limit Reported`: the model accepted the oversized token test without exposing a hard limit.
 - `Rate Limited`: the backend hit NVIDIA's request cap and backed off. Retry the row later or rerun the batch after the cooldown window.
 - `Inactive`: the availability test failed for that model.

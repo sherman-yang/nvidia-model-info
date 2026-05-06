@@ -118,11 +118,6 @@ function compareValues(aValue, bValue) {
   });
 }
 
-function isFiniteNumber(value) {
-  const n = Number(value);
-  return Number.isFinite(n);
-}
-
 function parseTokenCount(value) {
   if (typeof value === "number" && Number.isFinite(value) && value > 0) {
     return Math.round(value);

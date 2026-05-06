@@ -1161,19 +1161,6 @@ function clonePayloadWithMaxTokens(payload, maxTokens) {
   };
 }
 
-const CONTEXT_LENGTH_PATTERNS = [
-  /this model'?s? maximum context length is (\d+(?:\.\d+)?[kmb]?)/i,
-  /maximum context length (?:is|of) (\d+(?:\.\d+)?[kmb]?)/i,
-  /context length (?:is|of) (\d+(?:\.\d+)?[kmb]?)/i,
-  /context window (?:is|of) (\d+(?:\.\d+)?[kmb]?)/i,
-  /max_model_len\s*=?\s*(\d+(?:\.\d+)?[kmb]?)/i,
-  /max_position_embeddings\s*[:=]?\s*(\d+(?:\.\d+)?[kmb]?)/i,
-  /supports up to (\d+(?:\.\d+)?[kmb]?) input tokens/i,
-  /input (?:sequence |prompt )?length .*?exceeds .*?(\d+(?:\.\d+)?[kmb]?)/i,
-  /maximum total tokens (?:is|are) (\d+(?:\.\d+)?[kmb]?)/i,
-  /total tokens (?:must|cannot) (?:be|exceed) .*?(\d+(?:\.\d+)?[kmb]?)/i
-];
-
 const MAX_OUTPUT_TOKEN_PATTERNS = [
   /max_tokens must be at most (\d+(?:\.\d+)?[kmb]?)/i,
   /max_tokens must be less than (?:or equal to )?(\d+(?:\.\d+)?[kmb]?)/i,
