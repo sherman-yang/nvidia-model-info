@@ -31,13 +31,14 @@ export NVIDIA_API_KEY="your_actual_key"
 - Start the server and open the dashboard.
 - Verify the status bar reads `First-time setup: loading model list and refreshing model cards from build.nvidia.com…`.
 - Verify the progress bar shows `Refreshing model cards: N/M (…%, context found: K) — <publisher>/<model>` and updates as work proceeds.
-- Verify the page reloads automatically when the populate finishes.
-- After reload, verify rows have `Context Limit` and `Labels` populated where the publisher's card supplies them.
+- Verify rows have `Context Limit` and `Labels` populated where the publisher's card supplies them after populate finishes.
+- Verify the search box is populated with `agentic` only after the first-time refresh finishes.
 
 ### Sorting And Filtering
 
-- Enter `llama` in the search box and verify the table filters immediately.
-- Type `agentic` (or `MoE`, `coding`) in the search box and verify only rows whose `Labels` cell contains that tag remain.
+- Verify the search box defaults to `agentic`.
+- Type `llama` in the search box and verify the table filters immediately.
+- Type `MoE` or `coding` in the search box and verify only rows whose displayed cells contain that term remain.
 - Type `agentic moe coding` (space-separated). Verify the table now contains rows with any of those labels (OR semantics across terms), not the empty intersection.
 - Toggle `Exclude Inactive/Error` and verify rows with `Error` or `Inactive` live results disappear.
 - Toggle `Tool Support` and verify only rows with `Tool Support = true` remain visible.
@@ -79,8 +80,7 @@ export NVIDIA_API_KEY="your_actual_key"
 - Verify the table clears immediately.
 - Verify any running batch test is stopped.
 - Verify the populate progress bar appears and updates while model cards are being fetched.
-- Verify the page reloads automatically when the populate finishes.
-- After reload, verify the next render returns fresh rows with no persisted live test values, and `Context Limit` / `Labels` reflect the latest publisher data.
+- After populate finishes, verify the next render returns fresh rows with no persisted live test values, and `Context Limit` / `Labels` reflect the latest publisher data.
 
 ### CLI Populate
 
