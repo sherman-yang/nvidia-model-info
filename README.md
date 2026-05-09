@@ -56,20 +56,21 @@ cd nvidia-model-info
 
 The server listens on `http://localhost:4920` and tries to open it in your
 default browser. On the very first launch the dashboard auto-populates
-`model_specs.json` from build.nvidia.com (~30 s) before the table fills in.
+`model_specs.json` from build.nvidia.com (~30 s) before applying the default
+`agentic` search filter.
 
 ## Controls
 
 | Control | Behavior |
 | --- | --- |
-| Search | Substring match across every visible cell. |
+| Search | Defaults to `agentic` after startup data loading. Substring match across every visible cell. |
 | Exclude Inactive/Error | Hides rows whose live test state is `Error` or `Inactive`. |
 | Tool Support | Keeps only rows confirmed to return tool calls. |
 | Ping / Re-test | Single-row live probe. Disabled without an API key. |
 | Test Displayed Models | Batch-tests displayed rows missing a complete result. Disabled without an API key. |
 | Shift + Click on Test Displayed Models | Force re-test every displayed row. |
 | Stop Testing | Cancels the running batch test. |
-| Force Refresh Data | Resets the probe cache, reloads `/v1/models`, re-pulls every model card from build.nvidia.com, then reloads the page. Always works (no API key needed). |
+| Force Refresh Data | Resets the probe cache, reloads `/v1/models`, re-pulls every model card from build.nvidia.com, then reloads the table. Always works (no API key needed). |
 
 ## What a live test actually does
 

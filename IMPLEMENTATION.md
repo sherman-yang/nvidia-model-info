@@ -138,7 +138,7 @@ See [docs/MODEL_CARD_FETCH.md](docs/MODEL_CARD_FETCH.md) for the full design, sl
 
 The frontend:
 
-- on first load, calls `/api/specs-meta`. If `entries === 0`, fires the same handler as `Force Refresh Data` instead of loading half a table.
+- on first load, calls `/api/specs-meta`. If `entries === 0`, fires the same handler as `Force Refresh Data` instead of loading half a table, then applies the default `agentic` search filter.
 - loads `/api/models-with-metadata`
 - renders a wide sortable table
 - applies search and checkbox filters
@@ -151,7 +151,7 @@ The frontend:
 
 ### Filtering
 
-- Search splits the input on whitespace and applies OR semantics: a row matches when any term appears as a substring in any displayed cell. Empty input keeps every row.
+- Search defaults to `agentic` after startup data loading. It splits the input on whitespace and applies OR semantics: a row matches when any term appears as a substring in any displayed cell. Empty input keeps every row.
 - `Exclude Inactive/Error` hides rows whose live result is `Error` or `Inactive`.
 - `Tool Support` hides every row except those with `toolSupport === true`.
 

@@ -39,7 +39,7 @@ The default URL is `http://localhost:4920`.
 
 - Browse: Scroll horizontally to inspect all flattened metadata columns.
 - Sort: Click any column header to toggle ascending or descending order.
-- Search: Filter rows by substring across all displayed values. Multiple terms separated by whitespace use OR — a row matches when any term appears in any column. Example: `agentic moe multimodal`.
+- Search: Defaults to `agentic` after startup data loading. Filter rows by substring across all displayed values. Multiple terms separated by whitespace use OR — a row matches when any term appears in any column. Example: `agentic moe multimodal`.
 - Exclude Inactive/Error: Hides rows whose live test resolved to `Error` or `Inactive`.
 - Tool Support: Shows only rows whose tool calling probe completed and returned `true`.
 
@@ -105,9 +105,9 @@ It does all of the following:
 - fetches a fresh model list and model metadata from NVIDIA
 - re-pulls every endpoint's model card from the public NGC catalog API and rewrites `model_specs.json`
 - shows a progress bar while the populate runs (`Refreshing model cards: …`)
-- reloads the page when finished so the table picks up the new specs
+- reloads the table data when finished so the table picks up the new specs
 
-On the very first load, when `model_specs.json` is empty, the dashboard fires this same flow automatically — no clicks required. The status bar reads `First-time setup: loading model list and refreshing model cards from build.nvidia.com…` while it runs.
+On the very first load, when `model_specs.json` is empty, the dashboard fires this same flow automatically — no clicks required. The status bar reads `First-time setup: loading model list and refreshing model cards from build.nvidia.com…` while it runs. The `agentic` search filter is applied only after this refresh finishes.
 
 The same refresh can also be triggered from the command line: `npm run populate-specs` (or `node populate_specs.js`). Useful for CI, cron, or one-off workflows.
 

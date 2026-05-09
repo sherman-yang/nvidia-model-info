@@ -54,6 +54,7 @@ Provide a local dashboard for inspecting the free model catalog on `build.nvidia
 
 - Provide an `Exclude Inactive/Error` filter.
 - Provide a `Tool Support` filter that keeps only rows with confirmed tool calling support.
+- The search box must default to `agentic` after startup data loading finishes.
 
 ### Usage Examples
 
@@ -72,9 +73,9 @@ Provide a local dashboard for inspecting the free model catalog on `build.nvidia
   - reset backend caches
   - fetch a fresh model list and metadata snapshot from NVIDIA
   - re-pull every endpoint's model card from build.nvidia.com and rewrite `model_specs.json`
-  - show progress while the populate runs and reload the page when done
+  - show progress while the populate runs and reload table data when done
 
-- On first load, when `model_specs.json` has no entries, the dashboard must automatically execute the same flow as `Force Refresh Data` so the user lands on a populated table without manual interaction.
+- On first load, when `model_specs.json` has no entries, the dashboard must automatically execute the same flow as `Force Refresh Data` so the user lands on a populated table without manual interaction, then apply the default `agentic` search filter.
 
 - The same model-card populate must also be runnable from the CLI as `npm run populate-specs` (or `node populate_specs.js`).
 

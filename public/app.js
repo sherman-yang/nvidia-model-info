@@ -19,6 +19,7 @@ const usageCloseBtn = document.getElementById("usage-close-btn");
 const usageCopyButtons = document.querySelectorAll("[data-copy-target]");
 
 const CHAT_COMPLETIONS_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
+const DEFAULT_SEARCH_TEXT = "agentic";
 const DEFAULT_COLUMN_WIDTH = 240;
 const PINNED_COLUMN_COUNT = 4;
 const COLUMN_WIDTHS = {
@@ -80,6 +81,11 @@ function applyApiKeyGating() {
 
 function setStatus(text) {
   statusEl.textContent = text;
+}
+
+function applyDefaultSearchFilter() {
+  state.filterText = DEFAULT_SEARCH_TEXT;
+  searchInput.value = DEFAULT_SEARCH_TEXT;
 }
 
 function normalizeValue(value) {
@@ -931,13 +937,18 @@ async function runPopulateWithProgress() {
 
 // Force Refresh Data: reset probe cache, reload the model list, then refresh
 // every model card from the catalog. This is the canonical "fetch latest from
-// build.nvidia.com" action — the only way these specs get updated.
-async function forceRefreshAll() {
+// build.nvidia.com" action -- the only way these specs get updated.
+async function forceRefreshAll({ applyDefaultSearch = false } = {}) {
   refreshBtn.disabled = true;
   try {
     await loadData(true);
     await runPopulateWithProgress();
-    setTimeout(() => window.location.reload(), 800);
+    await loadData(false);
+    if (applyDefaultSearch) {
+      applyDefaultSearchFilter();
+      render();
+    }
+    hidePopulateProgress();
   } catch (err) {
     console.error("Force Refresh failed:", err);
     batchStatus.textContent = `Refresh failed: ${err.message}`;
@@ -948,7 +959,9 @@ async function forceRefreshAll() {
   }
 }
 
-refreshBtn.addEventListener("click", forceRefreshAll);
+refreshBtn.addEventListener("click", () => {
+  forceRefreshAll();
+});
 
 // First-load behaviour: if model_specs.json is missing or empty, simulate
 // pressing Force Refresh Data so the user lands on a populated table without
@@ -1022,8 +1035,10 @@ document.addEventListener("keydown", (event) => {
 (async () => {
   if (await isFirstLoad()) {
     setStatus("First-time setup: loading model list and refreshing model cards from build.nvidia.com...");
-    forceRefreshAll();
+    await forceRefreshAll({ applyDefaultSearch: true });
   } else {
-    loadData(false);
+    await loadData(false);
+    applyDefaultSearchFilter();
+    render();
   }
 })();
