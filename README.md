@@ -1,5 +1,7 @@
 # NVIDIA Model Info Dashboard
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 A local web dashboard for browsing the free NVIDIA models listed on
 [build.nvidia.com](https://build.nvidia.com), with sortable metadata, model-card
 specs, live API probes, tool-calling detection, and copyable cURL examples.
@@ -151,4 +153,4 @@ npm run populate-specs  # rebuild model_specs.json from NVIDIA model cards
 
 ## License
 
-MIT. See [package.json](package.json).
+MIT. See [LICENSE](LICENSE).
