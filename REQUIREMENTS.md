@@ -38,9 +38,11 @@ Provide a local dashboard for inspecting the free model catalog on `build.nvidia
   - latency
   - max output tokens (only when the spec did not already provide a value)
   - tool calling support
-- Availability probing must use a high token budget by default (`262144`) and a
-  tiered timeout strategy: 30 seconds for the first attempt and 120 seconds for
-  the fallback attempt.
+- Availability probing must first omit `max_tokens`, then step through `4096`,
+  `16384`, `65536`, and `262144` by default when needed.
+- Availability probing must use a tiered timeout strategy: 30 seconds for
+  no-`max_tokens`, `4096`, and `16384` attempts; 120 seconds for `65536` and
+  `262144` attempts.
 - Availability results must distinguish HTTP-callable, normal-output,
   length-limited, timeout, backend-error, auth-error, and unavailable cases
   instead of collapsing every non-success into one generic failure.
@@ -54,8 +56,11 @@ Provide a local dashboard for inspecting the free model catalog on `build.nvidia
 - `Tool Support` must remain blank until a tool support probe finishes.
 - `429 Too Many Requests` responses must be treated as rate limiting, not as confirmed unsupported-tool results.
 - Tool support detection must classify explicit tool-field validation errors such as unsupported or unknown `tools`, `tool_choice`, `functions`, and `function_call` fields as unsupported-tool results instead of leaving them inconclusive.
-- Tool support probes must use `max_tokens: 512` by default and must not mark
-  accepted-but-truncated tool probe responses as confirmed false.
+- Tool support probes must use bounded token ladders, starting at `128` for the
+  primary `tools` variant and ending with a no-`max_tokens` fallback when
+  needed.
+- Tool support probes must stop after 8 requests per model by default and must
+  not mark accepted-but-truncated tool probe responses as confirmed false.
 - Tool support probes must use timeout tiers and early-stop decisions so slow
   models do not run every request variant after a terminal result is known.
 - Probe cache entries must carry a schema/config version and stale entries must

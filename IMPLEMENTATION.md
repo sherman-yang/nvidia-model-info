@@ -69,10 +69,11 @@ All remaining metadata keys are flattened and appended as sortable columns.
 `GET /api/test-model?model=...` performs up to three probes:
 
 1. Availability and latency probe
-   - sends a chat completion request with `max_tokens` set from `AVAILABILITY_PROBE_MAX_TOKENS` (`262144` by default, i.e. 256K)
+   - first sends a chat completion request without `max_tokens`
+   - then steps through `AVAILABILITY_TOKEN_STEPS` (`4096,16384,65536,262144` by default) until the model is callable or a terminal failure is known
    - asks the model to reply with exactly `OK` so successful models should stop quickly even with the high token budget
-   - first uses `AVAILABILITY_INITIAL_TIMEOUT_MS` (`30000` by default)
-   - retries once with `AVAILABILITY_FALLBACK_TIMEOUT_MS` (`120000` by default) when the first attempt times out or when NVIDIA returns a smaller output cap for the 256K request
+   - no-`max_tokens`, `4096`, and `16384` attempts use `AVAILABILITY_INITIAL_TIMEOUT_MS` (`30000` by default)
+   - `65536` and `262144` attempts use `AVAILABILITY_FALLBACK_TIMEOUT_MS` (`120000` by default)
    - `200` means HTTP-callable, but the backend also records whether the response was a normal final answer, length-limited, reasoning-only, or missing final content
    - latency is measured around all availability attempts for that model
    - all model-invocation probe requests pass through a shared rate limiter before the request is sent
@@ -95,14 +96,18 @@ All remaining metadata keys are flattened and appended as sortable columns.
      - `tool_choice: "auto"`
      - forced `tool_choice`
      - legacy `functions` plus `function_call`
-   - uses `TOOL_SUPPORT_MAX_TOKENS` (`512` by default)
-   - first uses `TOOL_SUPPORT_INITIAL_TIMEOUT_MS` (`30000` by default)
-   - retries the same variant once with `TOOL_SUPPORT_FALLBACK_TIMEOUT_MS` (`120000` by default) only when that variant times out
+   - primary `tools` attempts use `TOOL_SUPPORT_TOKEN_BUDGETS` (`128,512,2048,8192` by default) followed by no `max_tokens`
+   - secondary `tool_choice` attempts use `TOOL_SUPPORT_SECONDARY_TOKEN_BUDGETS` (`512,2048` by default) followed by no `max_tokens`
+   - legacy `functions` attempts use `TOOL_SUPPORT_LEGACY_TOKEN_BUDGETS` (`512` by default) followed by no `max_tokens`
+   - each attempt starts with `TOOL_SUPPORT_INITIAL_TIMEOUT_MS` (`30000` by default)
+   - the same budget is retried once with `TOOL_SUPPORT_FALLBACK_TIMEOUT_MS` (`120000` by default) only when that attempt times out
+   - the entire tool probe is capped by `TOOL_SUPPORT_MAX_ATTEMPTS` (`8` by default)
    - only runs after the availability probe confirms the model accepts a chat completion request
-   - early-stops on confirmed support, explicit unsupported-tool errors, rate limits, backend errors, or fallback timeout
-   - treats accepted-but-length-limited responses without tool calls as inconclusive unless `TOOL_SUPPORT_RETRY_MAX_TOKENS` is configured above the current budget
+   - early-stops on confirmed support, rate limits, backend errors, fallback timeout, or the max-attempt cap
+   - continues to the next request variant after explicit unsupported-tool errors
+   - increases token budgets after accepted responses without tool calls, including `finish_reason="length"`
    - marks `toolSupport=true` only when the response actually includes tool calls
-   - marks `toolSupport=false` only when the probe ends with explicit unsupported-tool evidence or when accepted requests still fail to emit tool calls after the retry path
+   - marks `toolSupport=false` only when all attempted variants provide explicit unsupported-tool evidence
    - leaves `toolSupportChecked=false` if the probe is rate-limited, times out, or returns any other inconclusive error
 
 The final result is written to `model_limits_cache.json` and the in-memory payload cache is invalidated.
@@ -189,7 +194,7 @@ The frontend:
 
 - blank: not tested
 - `true`: supported
-- `false`: explicitly unsupported or accepted but still no tool call observed
+- `false`: explicitly unsupported by all attempted request variants
 
 Rows that hit NVIDIA rate limits show `Rate Limited` in the live probe output and remain retryable. The `Tool Support` cell title carries `toolSupportReason` and `toolSupportSummary` so false or inconclusive results can be inspected without adding another visible column.
 
@@ -230,13 +235,16 @@ Supported environment variables:
 - `PROBE_MIN_INTERVAL_MS`
 - `PROBE_TIMEOUT_MS`
 - `AVAILABILITY_PROBE_MAX_TOKENS`
+- `AVAILABILITY_TOKEN_STEPS`
 - `AVAILABILITY_INITIAL_TIMEOUT_MS`
 - `AVAILABILITY_FALLBACK_TIMEOUT_MS`
 - `OUTPUT_LIMIT_MAX_TOKENS`
 - `OUTPUT_LIMIT_INITIAL_TIMEOUT_MS`
 - `OUTPUT_LIMIT_FALLBACK_TIMEOUT_MS`
-- `TOOL_SUPPORT_MAX_TOKENS`
-- `TOOL_SUPPORT_RETRY_MAX_TOKENS`
+- `TOOL_SUPPORT_TOKEN_BUDGETS`
+- `TOOL_SUPPORT_SECONDARY_TOKEN_BUDGETS`
+- `TOOL_SUPPORT_LEGACY_TOKEN_BUDGETS`
+- `TOOL_SUPPORT_MAX_ATTEMPTS`
 - `TOOL_SUPPORT_INITIAL_TIMEOUT_MS`
 - `TOOL_SUPPORT_FALLBACK_TIMEOUT_MS`
 - `PROBE_MAX_429_RETRIES`

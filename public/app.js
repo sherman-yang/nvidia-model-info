@@ -407,6 +407,7 @@ function humanizeToolSupportReason(reason) {
     rate_limited: "Rate Limited",
     timeout: "Timeout",
     backend_error: "Backend Error",
+    max_tokens_unsupported: "Max Tokens Unsupported",
     inconclusive: "Inconclusive",
     request_error: "Request Error"
   };

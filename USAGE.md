@@ -51,9 +51,9 @@ Click `Ping` on a row to re-test that model.
 
 The backend probes:
 
-1. Availability and latency with `max_tokens: 262144`, a 30-second first timeout, and a 120-second fallback timeout.
+1. Availability and latency with a ladder: no `max_tokens`, then `4096`, `16384`, `65536`, and `262144` when needed. Lower-budget attempts use a 30-second timeout; `65536` and `262144` use a 120-second timeout.
 2. Output-token limit when `model_specs.json` does not already provide `maxOutputTokens`; this can still run after an availability timeout or inconclusive availability error and has its own 30-second / 120-second timeout tiers.
-3. Tool calling support with `max_tokens: 512`, 30-second initial timeout, 120-second fallback timeout, and early-stop classification.
+3. Tool calling support with a bounded token ladder. The primary `tools` request tries `128`, `512`, `2048`, `8192`, then no `max_tokens`; secondary variants use smaller ladders; the whole tool probe stops after 8 requests.
 
 `Context Limit` is never re-probed live — it always comes from `model_specs.json`. To refresh that value, use `Force Refresh Data` (or `npm run populate-specs`).
 
@@ -81,8 +81,8 @@ Click `Test Displayed Models` to batch-test the rows that are currently displaye
 - `Tool Support`:
   - blank = not tested yet
   - `true` = tool calling support confirmed
-  - `false` = the probe completed and concluded either that tool fields are explicitly unsupported or that accepted requests still did not emit tool calls
-- The backend tries tool-calling payload variants with early stop, expands the unsupported classification for tool-field validation errors, and leaves accepted-but-truncated responses inconclusive unless `TOOL_SUPPORT_RETRY_MAX_TOKENS` is configured above the default 512-token budget.
+  - `false` = the probe completed and all attempted request variants gave explicit unsupported-tool evidence
+- The backend tries tool-calling payload variants with early stop, expands the unsupported classification for tool-field validation errors, increases token budgets only when needed, and keeps inconclusive rows blank instead of forcing a false result.
 - `Rate Limited`: the NVIDIA API returned `429 Too Many Requests`. These rows are left retryable instead of being treated as confirmed failures.
 - `Tested At`: Local timestamp saved with the last completed live probe.
 - Hover the `Tool Support` cell to inspect the stored reason summary for `false` or inconclusive results.
