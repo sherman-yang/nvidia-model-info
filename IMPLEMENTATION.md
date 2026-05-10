@@ -69,16 +69,24 @@ All remaining metadata keys are flattened and appended as sortable columns.
 `GET /api/test-model?model=...` performs up to three probes:
 
 1. Availability and latency probe
-   - sends a minimal chat completion request
-   - `200` means available
-   - latency is measured client-side around that request
-   - all probe requests pass through a shared rate limiter before the request is sent
+   - sends a chat completion request with `max_tokens` set from `AVAILABILITY_PROBE_MAX_TOKENS` (`262144` by default, i.e. 256K)
+   - asks the model to reply with exactly `OK` so successful models should stop quickly even with the high token budget
+   - first uses `AVAILABILITY_INITIAL_TIMEOUT_MS` (`30000` by default)
+   - retries once with `AVAILABILITY_FALLBACK_TIMEOUT_MS` (`120000` by default) when the first attempt times out or when NVIDIA returns a smaller output cap for the 256K request
+   - `200` means HTTP-callable, but the backend also records whether the response was a normal final answer, length-limited, reasoning-only, or missing final content
+   - latency is measured around all availability attempts for that model
+   - all model-invocation probe requests pass through a shared rate limiter before the request is sent
 
 2. Output-token limit probe
    - skipped entirely when `model_specs.json` already provides `maxOutputTokens` for this model
+   - can run after an availability timeout, backend error, or other inconclusive availability result
+   - skipped after terminal availability failures such as auth errors or explicit model-unavailable errors
+   - first uses `OUTPUT_LIMIT_INITIAL_TIMEOUT_MS` (`30000` by default)
+   - retries once with `OUTPUT_LIMIT_FALLBACK_TIMEOUT_MS` (`120000` by default) when the first output-limit attempt times out
    - sends an oversized `max_tokens` request and parses the resulting NVIDIA error for the limit
-   - if the model accepts the oversized value, falls back to `No Limit Reported`
+   - if the model accepts the oversized value, the visible value remains `Unknown` and the hidden status is `no_limit_reported`
    - if NVIDIA returns `429`, falls back to `Rate Limited`
+   - writes hidden `maxOutputTokensSource`, `maxOutputTokensStatus`, and `maxOutputTokensSummary` fields for tooltips and diagnostics
    - `contextLength` is never probed live — it comes from `model_specs.json` only. If the spec is missing, the column shows `Not Tested`.
 
 3. Tool support probe
@@ -87,7 +95,12 @@ All remaining metadata keys are flattened and appended as sortable columns.
      - `tool_choice: "auto"`
      - forced `tool_choice`
      - legacy `functions` plus `function_call`
-   - starts with a small `max_tokens` budget and retries the same accepted request once with a larger budget when the response stops with `finish_reason="length"` before producing tool calls
+   - uses `TOOL_SUPPORT_MAX_TOKENS` (`512` by default)
+   - first uses `TOOL_SUPPORT_INITIAL_TIMEOUT_MS` (`30000` by default)
+   - retries the same variant once with `TOOL_SUPPORT_FALLBACK_TIMEOUT_MS` (`120000` by default) only when that variant times out
+   - only runs after the availability probe confirms the model accepts a chat completion request
+   - early-stops on confirmed support, explicit unsupported-tool errors, rate limits, backend errors, or fallback timeout
+   - treats accepted-but-length-limited responses without tool calls as inconclusive unless `TOOL_SUPPORT_RETRY_MAX_TOKENS` is configured above the current budget
    - marks `toolSupport=true` only when the response actually includes tool calls
    - marks `toolSupport=false` only when the probe ends with explicit unsupported-tool evidence or when accepted requests still fail to emit tool calls after the retry path
    - leaves `toolSupportChecked=false` if the probe is rate-limited, times out, or returns any other inconclusive error
@@ -106,6 +119,8 @@ There are three layers of persisted state:
 - Persistent live test cache
   - file: `model_limits_cache.json` (gitignored)
   - stores per-model live probe results across page reloads and server restarts
+  - each entry includes `probeSchemaVersion` and a probe configuration snapshot
+  - stale entries from older schema/config combinations are ignored instead of merged into current rows
 
 - Persistent spec data
   - file: `model_specs.json` (committed to the repo)
@@ -164,7 +179,8 @@ The frontend:
   - numeric `maxOutputTokens`
   - `toolSupportChecked === true`
 - `Shift + Click` forces re-testing of every displayed row.
-- The batch runner does not insert any artificial delay between models — pacing is handled by the backend's global probe rate limiter (`PROBE_RATE_LIMIT_RPM`, default 40 RPM = 1500 ms minimum gap between any two outgoing NVIDIA requests).
+- The batch runner does not insert any artificial delay between models — pacing is handled by the backend's global model-probe rate limiter (`PROBE_RATE_LIMIT_RPM`, default 39 RPM, with at least a 1550 ms minimum gap between any two outgoing `/v1/chat/completions` probe requests).
+- The limiter is intentionally fixed-spacing. Do not replace it with token-bucket behavior; staying strictly below 40 RPM is required.
 - If a row still lacks numeric token limits after a run, or the row is marked `Rate Limited`, it is retried once back-to-back. The rate limiter ensures the retry's first probe also waits its turn.
 
 ### Tool Support Display
@@ -213,7 +229,16 @@ Supported environment variables:
 - `PROBE_RATE_LIMIT_RPM`
 - `PROBE_MIN_INTERVAL_MS`
 - `PROBE_TIMEOUT_MS`
-- `TOOL_SUPPORT_TIMEOUT_MS`
+- `AVAILABILITY_PROBE_MAX_TOKENS`
+- `AVAILABILITY_INITIAL_TIMEOUT_MS`
+- `AVAILABILITY_FALLBACK_TIMEOUT_MS`
+- `OUTPUT_LIMIT_MAX_TOKENS`
+- `OUTPUT_LIMIT_INITIAL_TIMEOUT_MS`
+- `OUTPUT_LIMIT_FALLBACK_TIMEOUT_MS`
+- `TOOL_SUPPORT_MAX_TOKENS`
+- `TOOL_SUPPORT_RETRY_MAX_TOKENS`
+- `TOOL_SUPPORT_INITIAL_TIMEOUT_MS`
+- `TOOL_SUPPORT_FALLBACK_TIMEOUT_MS`
 - `PROBE_MAX_429_RETRIES`
 - `PROBE_429_BACKOFF_MS`
 - `POPULATE_CONCURRENCY`
