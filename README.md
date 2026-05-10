@@ -73,10 +73,17 @@ NVIDIA model cards.
 
 `GET /api/test-model?model=<id>` performs up to three sequential checks:
 
-1. Availability and latency using a minimal `chat/completions` call.
+1. Availability and latency using a `chat/completions` call with
+   `max_tokens: 262144` by default. The first attempt uses a 30-second timeout;
+   timeout or output-cap rejection falls back once with a 120-second timeout.
+   Availability stores a hidden status such as `available`,
+   `available_length_limited`, `timeout`, `unavailable`, or `backend_error`.
 2. Max output token detection using an oversized `max_tokens` request when
-   `model_specs.json` does not already provide the value.
-3. Tool-calling detection using several OpenAI-compatible request shapes:
+   `model_specs.json` does not already provide the value. This can still run
+   after an availability timeout or inconclusive availability error, but not
+   after clear auth/model-unavailable failures.
+3. Tool-calling detection using `max_tokens: 512` and several
+   OpenAI-compatible request shapes:
    `tools`, `tool_choice: "auto"`, forced `tool_choice`, and legacy
    `functions` / `function_call`.
 
@@ -86,14 +93,24 @@ model's full context window.
 
 ## Rate Limiting
 
-All outgoing NVIDIA probe calls pass through one global pacing gate.
+All outgoing NVIDIA model-invocation probe calls pass through one global pacing
+gate. This applies to `/v1/chat/completions` calls used for availability,
+output-limit, and tool-support probes. Model-list and model-metadata GET calls
+are not paced. The limiter intentionally uses fixed minimum spacing between
+every outgoing probe call. Do not replace it with token-bucket behavior; model
+probe calls must stay strictly below NVIDIA's 40 RPM free-tier cap.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `PROBE_RATE_LIMIT_RPM` | `40` | Main rate-limit knob |
-| `PROBE_MIN_INTERVAL_MS` | derived | Minimum delay between any two probe calls |
+| `PROBE_RATE_LIMIT_RPM` | `39` | Main rate-limit knob, clamped below 40 RPM |
+| `PROBE_MIN_INTERVAL_MS` | derived, minimum `1550` | Minimum delay between any two model probe calls |
 | `PROBE_MAX_429_RETRIES` | `2` | Retries after `429 Too Many Requests` |
 | `PROBE_429_BACKOFF_MS` | `10000` | Base exponential backoff when no `Retry-After` header exists |
+| `AVAILABILITY_PROBE_MAX_TOKENS` | `262144` | `max_tokens` used by the availability probe before cap-aware retry |
+| `AVAILABILITY_INITIAL_TIMEOUT_MS` | `30000` | First availability probe timeout |
+| `AVAILABILITY_FALLBACK_TIMEOUT_MS` | `120000` | Fallback availability probe timeout |
+| `OUTPUT_LIMIT_INITIAL_TIMEOUT_MS` | `30000` | First output-limit probe timeout |
+| `OUTPUT_LIMIT_FALLBACK_TIMEOUT_MS` | `120000` | Fallback output-limit probe timeout |
 
 Rows that hit rate limits stay retryable instead of being cached as normal
 failures.
@@ -110,7 +127,16 @@ load `.env` files.
 | `MAX_CONCURRENCY` | `12` | Parallel metadata fetches |
 | `REQUEST_TIMEOUT_MS` | `20000` | Generic HTTP timeout |
 | `CACHE_TTL_MS` | `300000` | In-memory table cache TTL |
-| `TOOL_SUPPORT_TIMEOUT_MS` | `25000` | Tool probe timeout |
+| `AVAILABILITY_PROBE_MAX_TOKENS` | `262144` | Availability probe token budget; default is 256K |
+| `AVAILABILITY_INITIAL_TIMEOUT_MS` | `30000` | First availability probe timeout |
+| `AVAILABILITY_FALLBACK_TIMEOUT_MS` | `120000` | Fallback availability probe timeout |
+| `OUTPUT_LIMIT_MAX_TOKENS` | `99999999` | Oversized token budget used to discover output caps |
+| `OUTPUT_LIMIT_INITIAL_TIMEOUT_MS` | `30000` | First output-limit probe timeout |
+| `OUTPUT_LIMIT_FALLBACK_TIMEOUT_MS` | `120000` | Fallback output-limit probe timeout |
+| `TOOL_SUPPORT_MAX_TOKENS` | `512` | Tool support probe token budget |
+| `TOOL_SUPPORT_INITIAL_TIMEOUT_MS` | `30000` | First tool support probe timeout |
+| `TOOL_SUPPORT_FALLBACK_TIMEOUT_MS` | `120000` | Fallback tool support probe timeout |
+| `TOOL_SUPPORT_RETRY_MAX_TOKENS` | `512` | Optional higher retry budget for length-limited tool probes |
 | `POPULATE_CONCURRENCY` | `6` | Concurrent model-card fetches |
 | `POPULATE_TIMEOUT_MS` | `20000` | Per model-card request timeout |
 | `NGC_BASE` | `https://api.ngc.nvidia.com/v2` | NGC catalog API base |
@@ -140,8 +166,8 @@ npm run populate-specs  # rebuild model_specs.json from NVIDIA model cards
   Anthropic-compatible `/v1/messages`.
 - Context length is shown only when model-card specs or explicit metadata
   provide it. The app does not infer context length from output-token errors.
-- Large batch tests can take time because all probe calls are paced to respect
-  NVIDIA's free-tier request limits.
+- Large batch tests can take time because model probe calls are paced to stay
+  below NVIDIA's free-tier request limit.
 
 ## Documentation
 

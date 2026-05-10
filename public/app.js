@@ -70,6 +70,23 @@ function isRateLimitedRow(row) {
   );
 }
 
+function getLiveTestLabel(data) {
+  if (data.rateLimited && !data.isAvailable) return "Rate Limited";
+  if (data.availabilityStatus === "timeout") return "Timeout";
+  if (data.availabilityStatus === "unavailable") return "Inactive";
+  if (
+    data.availabilityStatus === "auth_error" ||
+    data.availabilityStatus === "backend_error" ||
+    data.availabilityStatus === "request_error"
+  ) {
+    return "Error";
+  }
+  if (data.latencyMs >= 0) {
+    return `${data.latencyMs}ms (${data.isAvailable ? "OK" : "Fail"})`;
+  }
+  return data.isAvailable ? "OK" : "Fail";
+}
+
 function applyApiKeyGating() {
   // Buttons that hit /v1/chat/completions need the key. Force Refresh Data
   // does not (NGC catalog API is unauthenticated), so leave it alone.
@@ -413,6 +430,31 @@ function buildToolSupportTitle(row) {
   return parts.join("\n");
 }
 
+function buildAvailabilityTitle(row) {
+  const parts = [];
+  if (row.availabilityStatus) {
+    parts.push(`Availability: ${row.availabilityStatus}`);
+  }
+  if (row.availabilitySummary) {
+    parts.push(`Detail: ${row.availabilitySummary}`);
+  }
+  return parts.join("\n");
+}
+
+function buildMaxOutputTitle(row) {
+  const parts = [];
+  if (row.maxOutputTokensSource) {
+    parts.push(`Source: ${row.maxOutputTokensSource}`);
+  }
+  if (row.maxOutputTokensStatus) {
+    parts.push(`Status: ${row.maxOutputTokensStatus}`);
+  }
+  if (row.maxOutputTokensSummary) {
+    parts.push(`Detail: ${row.maxOutputTokensSummary}`);
+  }
+  return parts.join("\n");
+}
+
 function formatTokensToK(val) {
   if (typeof val === "number") {
     return Math.round(val / 1024) + "K";
@@ -440,6 +482,11 @@ async function runLiveTest(row, btn, isRetry = false) {
     row.toolSupportChecked = false;
     row.toolSupportReason = "";
     row.toolSupportSummary = "";
+    row.availabilityStatus = "";
+    row.availabilitySummary = "";
+    row.maxOutputTokensSource = "";
+    row.maxOutputTokensStatus = "";
+    row.maxOutputTokensSummary = "";
     row.rateLimited = false;
     row.testedAt = "";
     row.testState = isRetry ? "retrying" : "testing";
@@ -464,10 +511,7 @@ async function runLiveTest(row, btn, isRetry = false) {
     if (!r.ok) throw new Error(data.error || "Bad status");
 
     // Update local state row
-    row.liveTest =
-      data.rateLimited && !data.isAvailable
-        ? "Rate Limited"
-        : `${data.latencyMs}ms (${data.isAvailable ? 'OK' : 'Fail'})`;
+    row.liveTest = getLiveTestLabel(data);
     row.latencyMs = data.latencyMs;
     row.contextLength = data.contextLength;
     row.maxOutputTokens = data.maxOutputTokens;
@@ -475,17 +519,22 @@ async function runLiveTest(row, btn, isRetry = false) {
     row.toolSupportChecked = Boolean(data.toolSupportChecked);
     row.toolSupportReason = data.toolSupportReason || "";
     row.toolSupportSummary = data.toolSupportSummary || "";
+    row.availabilityStatus = data.availabilityStatus || "";
+    row.availabilitySummary = data.availabilitySummary || "";
+    row.maxOutputTokensSource = data.maxOutputTokensSource || "";
+    row.maxOutputTokensStatus = data.maxOutputTokensStatus || "";
+    row.maxOutputTokensSummary = data.maxOutputTokensSummary || "";
     row.rateLimited = Boolean(data.rateLimited);
     row.testedAt = data.testedAt || "";
 
     // Determine state
     if (data.rateLimited) {
       row.testState = "warning";
-    } else if (!data.isAvailable) {
+    } else if (!data.isAvailable && data.availabilityStatus !== "timeout") {
       row.testState = "error";
     } else {
       const hasNumbers = typeof data.contextLength === 'number' || typeof data.maxOutputTokens === 'number';
-      row.testState = hasNumbers ? "success" : "warning";
+      row.testState = data.availabilityStatus === "available" && hasNumbers ? "success" : "warning";
     }
 
     // Force a re-render
@@ -499,6 +548,11 @@ async function runLiveTest(row, btn, isRetry = false) {
     row.toolSupportChecked = false;
     row.toolSupportReason = "request_error";
     row.toolSupportSummary = e.message || "";
+    row.availabilityStatus = "request_error";
+    row.availabilitySummary = e.message || "";
+    row.maxOutputTokensSource = "";
+    row.maxOutputTokensStatus = "";
+    row.maxOutputTokensSummary = "";
     row.rateLimited = false;
     row.testedAt = "";
     row.testState = "error";
@@ -550,6 +604,11 @@ async function runBatchTest(force = false) {
       row.toolSupportChecked = false;
       row.toolSupportReason = "";
       row.toolSupportSummary = "";
+      row.availabilityStatus = "";
+      row.availabilitySummary = "";
+      row.maxOutputTokensSource = "";
+      row.maxOutputTokensStatus = "";
+      row.maxOutputTokensSummary = "";
       row.rateLimited = false;
       row.testedAt = "";
       row.testState = "";
@@ -577,7 +636,7 @@ async function runBatchTest(force = false) {
     if (signal.aborted) break;
 
     // Skip if already tested with numeric limits, unless forcing
-    // Models that were tested but got non-numeric results (Error, No Limit Reported, etc.) are retested
+    // Models that were tested but got non-numeric results (Error, Unknown, etc.) are retested
     const hasNumericLimits = hasNumericProbeLimits(row);
     if (
       !force &&
@@ -683,6 +742,7 @@ function renderTableBody(rows) {
         if (row.testState) {
           td.classList.add(`status-${row.testState}`);
         }
+        td.title = buildAvailabilityTitle(row);
         
         const hasResult = row.liveTest && typeof row.liveTest === "string" && row.liveTest !== "Test";
         if (hasResult) {
@@ -707,6 +767,9 @@ function renderTableBody(rows) {
         td.appendChild(btn);
       } else if (columnKey === "contextLength" || columnKey === "maxOutputTokens") {
         td.textContent = value === null || value === undefined ? "" : formatTokensToK(value);
+        if (columnKey === "maxOutputTokens") {
+          td.title = buildMaxOutputTitle(row);
+        }
       } else if (columnKey === "toolSupport") {
         td.textContent = row.toolSupportChecked === true ? (value === true ? "true" : "false") : "";
         td.title = buildToolSupportTitle(row);
@@ -838,6 +901,11 @@ async function loadData(forceRefresh = false) {
       row.toolSupport = row.toolSupportChecked ? row.toolSupport === true : "";
       row.toolSupportReason = row.toolSupportReason || "";
       row.toolSupportSummary = row.toolSupportSummary || "";
+      row.availabilityStatus = row.availabilityStatus || "";
+      row.availabilitySummary = row.availabilitySummary || "";
+      row.maxOutputTokensSource = row.maxOutputTokensSource || "";
+      row.maxOutputTokensStatus = row.maxOutputTokensStatus || "";
+      row.maxOutputTokensSummary = row.maxOutputTokensSummary || "";
       row.rateLimited = Boolean(row.rateLimited) || isRateLimitedRow(row);
       const live = String(row.liveTest || "");
       if (live === "Test") {

@@ -49,6 +49,19 @@ export NVIDIA_API_KEY="your_actual_key"
 - Click `Ping` on an untested row.
 - Verify the row clears immediately into a testing state.
 - Verify latency, max output, and tested timestamp are updated after the request.
+- Run with `PROBE_TRACE=1` and verify the availability probe logs
+  `Availability initial (262144 max_tokens, 30000ms timeout)` unless the
+  availability environment variables are overridden.
+- For a model that rejects 256K as above its output cap, verify the backend
+  retries once with the parsed cap and the 120-second fallback timeout instead
+  of immediately marking the row inactive.
+- For a slow reasoning model, verify the availability probe uses
+  `AVAILABILITY_FALLBACK_TIMEOUT_MS` after the first 30-second timeout.
+- Verify live probe responses include hidden `availabilityStatus` and
+  `availabilitySummary` fields, and that the live cell tooltip shows them.
+- Verify output-limit probes use `OUTPUT_LIMIT_INITIAL_TIMEOUT_MS=30000` and
+  `OUTPUT_LIMIT_FALLBACK_TIMEOUT_MS=120000` on timeout, and that the `Max Output`
+  cell tooltip shows source/status/summary details.
 - Verify `Context Limit` is unchanged by the ping — it comes from `model_specs.json` only and is never probed.
 - Verify `Tool Support` is:
   - blank before test completion
@@ -62,10 +75,15 @@ export NVIDIA_API_KEY="your_actual_key"
 - Click `Test Displayed Models`.
 - Verify rows that are missing a complete live result are tested sequentially.
 - Verify the progress area appears and the button changes to `Stop Testing`.
-- Run with `PROBE_TRACE=1` and verify every consecutive `[probe-trace ...]` log line is at least `60000 / PROBE_RATE_LIMIT_RPM` ms apart (= 1500 ms at the default 40 RPM). This is the only rate-limit mechanism — there is no per-model delay layered on top.
+- Run with `PROBE_TRACE=1` and verify every consecutive `[probe-trace ...]` model-probe log line is at least the configured fixed spacing apart. At defaults, that means at least 1550 ms between any two `/v1/chat/completions` probe calls, keeping model invocations strictly below 40 RPM. This is the only probe rate-limit mechanism — there is no per-model delay layered on top.
 - Verify a row with missing numeric token limits gets retried once back-to-back (no extra wait, the rate limiter handles spacing).
 - If NVIDIA returns `429`, verify the row shows `Rate Limited` and remains eligible for retry instead of being treated as a confirmed unsupported result.
-- If a model accepts a tool request but stops with `finish_reason="length"` before returning a tool call, verify the backend retries that variant with a larger `max_tokens` budget before concluding `false`.
+- Verify tool support probes use `TOOL_SUPPORT_MAX_TOKENS=512` by default.
+- Verify tool support probes use a 30-second initial timeout and one 120-second
+  fallback timeout only for the same timed-out variant.
+- Verify tool support testing stops early on confirmed support, explicit
+  unsupported-tool errors, rate limits, backend errors, or fallback timeout.
+- If a model accepts a tool request but stops with `finish_reason="length"` before returning a tool call, verify the backend leaves the tool result inconclusive unless `TOOL_SUPPORT_RETRY_MAX_TOKENS` is configured above the current budget.
 - Click `Stop Testing` and verify the batch run stops.
 
 ### Forced Batch Re-Test

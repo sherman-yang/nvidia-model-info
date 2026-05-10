@@ -38,16 +38,34 @@ Provide a local dashboard for inspecting the free model catalog on `build.nvidia
   - latency
   - max output tokens (only when the spec did not already provide a value)
   - tool calling support
+- Availability probing must use a high token budget by default (`262144`) and a
+  tiered timeout strategy: 30 seconds for the first attempt and 120 seconds for
+  the fallback attempt.
+- Availability results must distinguish HTTP-callable, normal-output,
+  length-limited, timeout, backend-error, auth-error, and unavailable cases
+  instead of collapsing every non-success into one generic failure.
+- Max output probing must not depend on a single successful availability probe;
+  it may still run after timeout or inconclusive availability results, while
+  preserving model-card `Context Limit` and existing spec values.
+- Max output probing must use independent timeout tiers and must keep source,
+  status, and summary diagnostics instead of treating `no_limit_reported` as a
+  hard numeric fact.
 - `Context Limit` must not be probed live. It comes from `model_specs.json` only.
 - `Tool Support` must remain blank until a tool support probe finishes.
 - `429 Too Many Requests` responses must be treated as rate limiting, not as confirmed unsupported-tool results.
 - Tool support detection must classify explicit tool-field validation errors such as unsupported or unknown `tools`, `tool_choice`, `functions`, and `function_call` fields as unsupported-tool results instead of leaving them inconclusive.
-- Tool support detection must retry accepted-but-truncated tool probe responses with a larger completion budget before concluding that tool calling was not observed.
+- Tool support probes must use `max_tokens: 512` by default and must not mark
+  accepted-but-truncated tool probe responses as confirmed false.
+- Tool support probes must use timeout tiers and early-stop decisions so slow
+  models do not run every request variant after a terminal result is known.
+- Probe cache entries must carry a schema/config version and stale entries must
+  not be merged into current model rows.
 - Batch testing must support:
   - testing currently displayed rows
   - skipping already complete rows by default
   - forcing a full re-test with `Shift + Click`
-  - no artificial delay between models — pacing must come from a single global rate limiter at `PROBE_RATE_LIMIT_RPM` (defaulting to NVIDIA's free-tier 40 RPM cap), enforced before every outgoing NVIDIA call
+  - no artificial delay between models — pacing must come from a single global fixed-spacing rate limiter at `PROBE_RATE_LIMIT_RPM` (default 39 RPM, minimum 1550 ms), enforced before every outgoing `/v1/chat/completions` model-probe call so model invocations stay strictly below NVIDIA's 40 RPM cap
+  - fixed minimum spacing only; do not implement token-bucket request pacing for this project
   - a single retry when numeric token limits are still missing or the model comes back rate-limited
 
 ### Filters
