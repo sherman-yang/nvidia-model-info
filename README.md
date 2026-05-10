@@ -73,19 +73,21 @@ NVIDIA model cards.
 
 `GET /api/test-model?model=<id>` performs up to three sequential checks:
 
-1. Availability and latency using a `chat/completions` call with
-   `max_tokens: 262144` by default. The first attempt uses a 30-second timeout;
-   timeout or output-cap rejection falls back once with a 120-second timeout.
-   Availability stores a hidden status such as `available`,
+1. Availability and latency using `chat/completions`. The first attempt sends
+   no `max_tokens`, then the backend steps through `4096`, `16384`, `65536`,
+   and `262144` when needed. Attempts below `65536` use a 30-second timeout;
+   `65536` and `262144` use a 120-second timeout. Availability stores a hidden
+   status such as `available`,
    `available_length_limited`, `timeout`, `unavailable`, or `backend_error`.
 2. Max output token detection using an oversized `max_tokens` request when
    `model_specs.json` does not already provide the value. This can still run
    after an availability timeout or inconclusive availability error, but not
    after clear auth/model-unavailable failures.
-3. Tool-calling detection using `max_tokens: 512` and several
-   OpenAI-compatible request shapes:
+3. Tool-calling detection using several OpenAI-compatible request shapes:
    `tools`, `tool_choice: "auto"`, forced `tool_choice`, and legacy
-   `functions` / `function_call`.
+   `functions` / `function_call`. The primary `tools` request steps through
+   `128`, `512`, `2048`, `8192`, and no `max_tokens`; secondary variants use
+   smaller fallback ladders and the whole tool probe stops after 8 requests.
 
 `Context Limit` is not guessed from max output. It comes from model-card specs
 or remains unknown. This avoids showing a completion-token cap as if it were the
@@ -106,7 +108,8 @@ probe calls must stay strictly below NVIDIA's 40 RPM free-tier cap.
 | `PROBE_MIN_INTERVAL_MS` | derived, minimum `1550` | Minimum delay between any two model probe calls |
 | `PROBE_MAX_429_RETRIES` | `2` | Retries after `429 Too Many Requests` |
 | `PROBE_429_BACKOFF_MS` | `10000` | Base exponential backoff when no `Retry-After` header exists |
-| `AVAILABILITY_PROBE_MAX_TOKENS` | `262144` | `max_tokens` used by the availability probe before cap-aware retry |
+| `AVAILABILITY_PROBE_MAX_TOKENS` | `262144` | Highest `max_tokens` used by the availability ladder |
+| `AVAILABILITY_TOKEN_STEPS` | `4096,16384,65536,262144` | Comma-separated availability token ladder after the no-`max_tokens` attempt |
 | `AVAILABILITY_INITIAL_TIMEOUT_MS` | `30000` | First availability probe timeout |
 | `AVAILABILITY_FALLBACK_TIMEOUT_MS` | `120000` | Fallback availability probe timeout |
 | `OUTPUT_LIMIT_INITIAL_TIMEOUT_MS` | `30000` | First output-limit probe timeout |
@@ -127,16 +130,19 @@ load `.env` files.
 | `MAX_CONCURRENCY` | `12` | Parallel metadata fetches |
 | `REQUEST_TIMEOUT_MS` | `20000` | Generic HTTP timeout |
 | `CACHE_TTL_MS` | `300000` | In-memory table cache TTL |
-| `AVAILABILITY_PROBE_MAX_TOKENS` | `262144` | Availability probe token budget; default is 256K |
+| `AVAILABILITY_PROBE_MAX_TOKENS` | `262144` | Highest availability probe token budget; default is 256K |
+| `AVAILABILITY_TOKEN_STEPS` | `4096,16384,65536,262144` | Comma-separated availability token ladder after no `max_tokens` |
 | `AVAILABILITY_INITIAL_TIMEOUT_MS` | `30000` | First availability probe timeout |
 | `AVAILABILITY_FALLBACK_TIMEOUT_MS` | `120000` | Fallback availability probe timeout |
 | `OUTPUT_LIMIT_MAX_TOKENS` | `99999999` | Oversized token budget used to discover output caps |
 | `OUTPUT_LIMIT_INITIAL_TIMEOUT_MS` | `30000` | First output-limit probe timeout |
 | `OUTPUT_LIMIT_FALLBACK_TIMEOUT_MS` | `120000` | Fallback output-limit probe timeout |
-| `TOOL_SUPPORT_MAX_TOKENS` | `512` | Tool support probe token budget |
+| `TOOL_SUPPORT_TOKEN_BUDGETS` | `128,512,2048,8192` | Primary `tools` token ladder before no `max_tokens` |
+| `TOOL_SUPPORT_SECONDARY_TOKEN_BUDGETS` | `512,2048` | `tool_choice` token ladder before no `max_tokens` |
+| `TOOL_SUPPORT_LEGACY_TOKEN_BUDGETS` | `512` | Legacy `functions` token ladder before no `max_tokens` |
+| `TOOL_SUPPORT_MAX_ATTEMPTS` | `8` | Maximum tool-support probe requests per model |
 | `TOOL_SUPPORT_INITIAL_TIMEOUT_MS` | `30000` | First tool support probe timeout |
 | `TOOL_SUPPORT_FALLBACK_TIMEOUT_MS` | `120000` | Fallback tool support probe timeout |
-| `TOOL_SUPPORT_RETRY_MAX_TOKENS` | `512` | Optional higher retry budget for length-limited tool probes |
 | `POPULATE_CONCURRENCY` | `6` | Concurrent model-card fetches |
 | `POPULATE_TIMEOUT_MS` | `20000` | Per model-card request timeout |
 | `NGC_BASE` | `https://api.ngc.nvidia.com/v2` | NGC catalog API base |

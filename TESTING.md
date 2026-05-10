@@ -50,13 +50,13 @@ export NVIDIA_API_KEY="your_actual_key"
 - Verify the row clears immediately into a testing state.
 - Verify latency, max output, and tested timestamp are updated after the request.
 - Run with `PROBE_TRACE=1` and verify the availability probe logs
-  `Availability initial (262144 max_tokens, 30000ms timeout)` unless the
+  `Availability initial (no max_tokens, 30000ms timeout)` first unless the
   availability environment variables are overridden.
-- For a model that rejects 256K as above its output cap, verify the backend
-  retries once with the parsed cap and the 120-second fallback timeout instead
+- For a model that fails the no-`max_tokens` availability attempt, verify the
+  backend steps through `4096`, `16384`, `65536`, and `262144` as needed instead
   of immediately marking the row inactive.
 - For a slow reasoning model, verify the availability probe uses
-  `AVAILABILITY_FALLBACK_TIMEOUT_MS` after the first 30-second timeout.
+  `AVAILABILITY_FALLBACK_TIMEOUT_MS` for `65536` and `262144` attempts.
 - Verify live probe responses include hidden `availabilityStatus` and
   `availabilitySummary` fields, and that the live cell tooltip shows them.
 - Verify output-limit probes use `OUTPUT_LIMIT_INITIAL_TIMEOUT_MS=30000` and
@@ -66,7 +66,7 @@ export NVIDIA_API_KEY="your_actual_key"
 - Verify `Tool Support` is:
   - blank before test completion
   - `true` when tool calls are observed
-  - `false` when the tool probe ends with explicit unsupported-tool evidence or accepted requests still do not emit tool calls
+  - `false` when all attempted request variants give explicit unsupported-tool evidence
   - still blank when the tool probe is inconclusive or rate-limited
 - Hover the `Tool Support` cell on a false or inconclusive row and verify the tooltip explains the stored reason and probe summary.
 
@@ -78,12 +78,16 @@ export NVIDIA_API_KEY="your_actual_key"
 - Run with `PROBE_TRACE=1` and verify every consecutive `[probe-trace ...]` model-probe log line is at least the configured fixed spacing apart. At defaults, that means at least 1550 ms between any two `/v1/chat/completions` probe calls, keeping model invocations strictly below 40 RPM. This is the only probe rate-limit mechanism — there is no per-model delay layered on top.
 - Verify a row with missing numeric token limits gets retried once back-to-back (no extra wait, the rate limiter handles spacing).
 - If NVIDIA returns `429`, verify the row shows `Rate Limited` and remains eligible for retry instead of being treated as a confirmed unsupported result.
-- Verify tool support probes use `TOOL_SUPPORT_MAX_TOKENS=512` by default.
-- Verify tool support probes use a 30-second initial timeout and one 120-second
-  fallback timeout only for the same timed-out variant.
-- Verify tool support testing stops early on confirmed support, explicit
-  unsupported-tool errors, rate limits, backend errors, or fallback timeout.
-- If a model accepts a tool request but stops with `finish_reason="length"` before returning a tool call, verify the backend leaves the tool result inconclusive unless `TOOL_SUPPORT_RETRY_MAX_TOKENS` is configured above the current budget.
+- Verify primary tool support probes use the default `128,512,2048,8192`
+  token ladder followed by no `max_tokens`.
+- Verify secondary tool support variants use their smaller configured ladders,
+  and verify the whole tool probe stops at `TOOL_SUPPORT_MAX_ATTEMPTS=8`.
+- Verify each tool support attempt uses a 30-second initial timeout and one
+  120-second fallback timeout only for the same timed-out budget.
+- Verify tool support testing stops early on confirmed support, rate limits,
+  backend errors, fallback timeout, or the max-attempt cap, and that explicit
+  unsupported-tool errors advance to the next request variant.
+- If a model accepts a tool request but stops with `finish_reason="length"` before returning a tool call, verify the backend advances to the next token budget before leaving the result inconclusive.
 - Click `Stop Testing` and verify the batch run stops.
 
 ### Forced Batch Re-Test

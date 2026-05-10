@@ -12,7 +12,7 @@ const API_BASE_URL = "https://integrate.api.nvidia.com/v1";
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 20000);
 const MAX_CONCURRENCY = Math.max(1, Number(process.env.MAX_CONCURRENCY || 12));
 const CACHE_TTL_MS = Math.max(1000, Number(process.env.CACHE_TTL_MS || 5 * 60 * 1000));
-const PROBE_CACHE_SCHEMA_VERSION = 2;
+const PROBE_CACHE_SCHEMA_VERSION = 3;
 // Sole authority on NVIDIA model-invocation probe call rate. Every live probe
 // request to /v1/chat/completions goes through reserveProbeSlot before fetch.
 // The default is intentionally below NVIDIA's 40 RPM cap. Do not replace this
@@ -72,13 +72,26 @@ const cache = {
 let probeRateLimitChain = Promise.resolve();
 let nextProbeSlotAt = 0;
 
+const AVAILABILITY_TOKEN_STEPS = buildTokenStepList(
+  process.env.AVAILABILITY_TOKEN_STEPS,
+  [4096, 16384, 65536, AVAILABILITY_PROBE_MAX_TOKENS],
+  AVAILABILITY_PROBE_MAX_TOKENS
+);
 const TOOL_SUPPORT_PROMPT =
   "Call the tool exactly once with location set to Calgary. Do not answer normally. Return immediately with the tool call and no extra reasoning.";
-const TOOL_SUPPORT_MAX_TOKENS = Math.max(1, Number(process.env.TOOL_SUPPORT_MAX_TOKENS || 512));
-const TOOL_SUPPORT_RETRY_MAX_TOKENS = Math.max(
-  TOOL_SUPPORT_MAX_TOKENS,
-  Number(process.env.TOOL_SUPPORT_RETRY_MAX_TOKENS || TOOL_SUPPORT_MAX_TOKENS)
+const TOOL_SUPPORT_TOKEN_BUDGETS = buildTokenStepList(
+  process.env.TOOL_SUPPORT_TOKEN_BUDGETS,
+  [128, 512, 2048, 8192]
 );
+const TOOL_SUPPORT_SECONDARY_TOKEN_BUDGETS = buildTokenStepList(
+  process.env.TOOL_SUPPORT_SECONDARY_TOKEN_BUDGETS,
+  [512, 2048]
+);
+const TOOL_SUPPORT_LEGACY_TOKEN_BUDGETS = buildTokenStepList(
+  process.env.TOOL_SUPPORT_LEGACY_TOKEN_BUDGETS,
+  [512]
+);
+const TOOL_SUPPORT_MAX_ATTEMPTS = Math.max(1, Number(process.env.TOOL_SUPPORT_MAX_ATTEMPTS || 8));
 const TOOL_SUPPORT_INITIAL_TIMEOUT_MS = Math.max(
   1000,
   Number(process.env.TOOL_SUPPORT_INITIAL_TIMEOUT_MS || 30000)
@@ -226,6 +239,33 @@ function parseResponseBodyText(bodyText) {
 function getPositiveNumber(value, fallback) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function buildTokenStepList(value, fallbackSteps, maxStep = Infinity) {
+  const rawSteps =
+    typeof value === "string" && value.trim()
+      ? value.split(",").map((item) => parseTokenCount(item))
+      : fallbackSteps;
+  const unique = [];
+  const seen = new Set();
+
+  for (const step of rawSteps) {
+    if (!Number.isFinite(step) || step <= 0 || step > maxStep || seen.has(step)) {
+      continue;
+    }
+    seen.add(step);
+    unique.push(step);
+  }
+
+  if (unique.length > 0) {
+    return unique;
+  }
+
+  const boundedFallback = fallbackSteps.filter((step) => step <= maxStep);
+  if (boundedFallback.length > 0) {
+    return boundedFallback;
+  }
+  return Number.isFinite(maxStep) && maxStep > 0 ? [maxStep] : [];
 }
 
 function sleep(ms) {
@@ -991,13 +1031,16 @@ function getProbeConfigSnapshot() {
     fixedRateLimitRpm: PROBE_RATE_LIMIT_RPM,
     probeMinIntervalMs: PROBE_MIN_INTERVAL_MS,
     availabilityMaxTokens: AVAILABILITY_PROBE_MAX_TOKENS,
+    availabilityTokenSteps: AVAILABILITY_TOKEN_STEPS,
     availabilityInitialTimeoutMs: AVAILABILITY_INITIAL_TIMEOUT_MS,
     availabilityFallbackTimeoutMs: AVAILABILITY_FALLBACK_TIMEOUT_MS,
     outputLimitMaxTokens: OUTPUT_LIMIT_MAX_TOKENS,
     outputLimitInitialTimeoutMs: OUTPUT_LIMIT_INITIAL_TIMEOUT_MS,
     outputLimitFallbackTimeoutMs: OUTPUT_LIMIT_FALLBACK_TIMEOUT_MS,
-    toolSupportMaxTokens: TOOL_SUPPORT_MAX_TOKENS,
-    toolSupportRetryMaxTokens: TOOL_SUPPORT_RETRY_MAX_TOKENS,
+    toolSupportTokenBudgets: TOOL_SUPPORT_TOKEN_BUDGETS,
+    toolSupportSecondaryTokenBudgets: TOOL_SUPPORT_SECONDARY_TOKEN_BUDGETS,
+    toolSupportLegacyTokenBudgets: TOOL_SUPPORT_LEGACY_TOKEN_BUDGETS,
+    toolSupportMaxAttempts: TOOL_SUPPORT_MAX_ATTEMPTS,
     toolSupportInitialTimeoutMs: TOOL_SUPPORT_INITIAL_TIMEOUT_MS,
     toolSupportFallbackTimeoutMs: TOOL_SUPPORT_FALLBACK_TIMEOUT_MS
   };
@@ -1042,21 +1085,7 @@ function shouldRetryAcceptedToolProbe(body) {
     return false;
   }
 
-  if (choice.finish_reason !== "length") {
-    return false;
-  }
-
-  const message = getPrimaryMessage(body);
-  const signals = [
-    message?.reasoning,
-    message?.reasoning_content,
-    message?.content
-  ]
-    .filter((value) => typeof value === "string")
-    .join(" ")
-    .toLowerCase();
-
-  return /tool call|call the tool|function call|get_weather|tool invocation/.test(signals);
+  return choice.finish_reason === "length";
 }
 
 function getErrorText(body, bodyText) {
@@ -1212,6 +1241,21 @@ function classifyToolSupportError(status, errorText) {
   }
 
   if (
+    (status === 400 || status === 422) &&
+    /max_tokens/i.test(normalized) &&
+    (
+      /unknown parameter/i.test(normalized) ||
+      /extra inputs are not permitted/i.test(normalized) ||
+      /extra_forbidden/i.test(normalized) ||
+      /not currently supported/i.test(normalized) ||
+      /not supported/i.test(normalized) ||
+      /not allowed/i.test(normalized)
+    )
+  ) {
+    return "max_tokens_unsupported";
+  }
+
+  if (
     /tool use has not been enabled/i.test(normalized) ||
     (/unsupported by/i.test(normalized) && mentionsToolFields) ||
     /tool(s)? (is|are)? not (enabled|supported|available)/i.test(normalized) ||
@@ -1259,8 +1303,7 @@ function getToolSupportProbePayloads(modelId) {
         role: "user",
         content: TOOL_SUPPORT_PROMPT
       }
-    ],
-    max_tokens: TOOL_SUPPORT_MAX_TOKENS
+    ]
   };
 
   return [
@@ -1269,6 +1312,14 @@ function getToolSupportProbePayloads(modelId) {
       payload: {
         ...basePayload,
         tools: [TOOL_SUPPORT_TOOL_SCHEMA]
+      }
+    },
+    {
+      name: "auto-tool-choice",
+      payload: {
+        ...basePayload,
+        tools: [TOOL_SUPPORT_TOOL_SCHEMA],
+        tool_choice: "auto"
       }
     },
     {
@@ -1285,14 +1336,6 @@ function getToolSupportProbePayloads(modelId) {
       }
     },
     {
-      name: "auto-tool-choice",
-      payload: {
-        ...basePayload,
-        tools: [TOOL_SUPPORT_TOOL_SCHEMA],
-        tool_choice: "auto"
-      }
-    },
-    {
       name: "legacy-function-call",
       payload: {
         ...basePayload,
@@ -1305,11 +1348,14 @@ function getToolSupportProbePayloads(modelId) {
   ];
 }
 
-function clonePayloadWithMaxTokens(payload, maxTokens) {
-  return {
-    ...payload,
-    max_tokens: maxTokens
-  };
+function clonePayloadWithOptionalMaxTokens(payload, maxTokens) {
+  const nextPayload = { ...payload };
+  if (typeof maxTokens === "number") {
+    nextPayload.max_tokens = maxTokens;
+  } else {
+    delete nextPayload.max_tokens;
+  }
+  return nextPayload;
 }
 
 const MAX_OUTPUT_TOKEN_PATTERNS = [
@@ -1341,12 +1387,29 @@ function extractFirstMatchingNumber(text, patterns) {
   return null;
 }
 
+function formatMaxTokensForSummary(maxTokens) {
+  return typeof maxTokens === "number" ? `${maxTokens} max_tokens` : "no max_tokens";
+}
+
+function getAvailabilityProbePlan() {
+  return [null, ...AVAILABILITY_TOKEN_STEPS].map((maxTokens) => ({
+    maxTokens,
+    timeoutMs:
+      typeof maxTokens === "number" && maxTokens >= 65536
+        ? AVAILABILITY_FALLBACK_TIMEOUT_MS
+        : AVAILABILITY_INITIAL_TIMEOUT_MS
+  }));
+}
+
 function buildAvailabilityPayload(modelId, maxTokens) {
-  return {
+  const payload = {
     model: modelId,
-    messages: [{ role: "user", content: "Reply with exactly: OK" }],
-    max_tokens: maxTokens
+    messages: [{ role: "user", content: "Reply with exactly: OK" }]
   };
+  if (typeof maxTokens === "number") {
+    payload.max_tokens = maxTokens;
+  }
+  return payload;
 }
 
 function buildOutputLimitPayload(modelId) {
@@ -1528,43 +1591,33 @@ function classifyAvailabilityAttempt(attempt) {
   };
 }
 
-function shouldRunAvailabilityFallback(classified) {
-  return (
-    classified.status === "timeout" ||
-    (
-      classified.tokenLimitHint &&
-      classified.tokenLimitHint > 0 &&
-      classified.tokenLimitHint < AVAILABILITY_PROBE_MAX_TOKENS
-    )
-  );
-}
-
 async function probeAvailability(url, headers, modelId) {
   const startedAt = Date.now();
-  const initialMaxTokens = AVAILABILITY_PROBE_MAX_TOKENS;
   const attempts = [];
+  const plan = getAvailabilityProbePlan();
 
-  let attempt = await runAvailabilityAttempt(
-    url,
-    headers,
-    modelId,
-    initialMaxTokens,
-    AVAILABILITY_INITIAL_TIMEOUT_MS,
-    `Availability initial (${initialMaxTokens} max_tokens, ${AVAILABILITY_INITIAL_TIMEOUT_MS}ms timeout)`
-  );
-  attempts.push(classifyAvailabilityAttempt(attempt));
-
-  if (shouldRunAvailabilityFallback(attempts[attempts.length - 1])) {
-    const fallbackMaxTokens = attempts[attempts.length - 1].tokenLimitHint || initialMaxTokens;
-    attempt = await runAvailabilityAttempt(
+  for (let index = 0; index < plan.length; index += 1) {
+    const { maxTokens, timeoutMs } = plan[index];
+    const phase = index === 0 ? "initial" : `step ${index}`;
+    const attempt = await runAvailabilityAttempt(
       url,
       headers,
       modelId,
-      fallbackMaxTokens,
-      AVAILABILITY_FALLBACK_TIMEOUT_MS,
-      `Availability fallback (${fallbackMaxTokens} max_tokens, ${AVAILABILITY_FALLBACK_TIMEOUT_MS}ms timeout)`
+      maxTokens,
+      timeoutMs,
+      `Availability ${phase} (${formatMaxTokensForSummary(maxTokens)}, ${timeoutMs}ms timeout)`
     );
-    attempts.push(classifyAvailabilityAttempt(attempt));
+    const classified = classifyAvailabilityAttempt(attempt);
+    attempts.push(classified);
+
+    if (
+      classified.isAvailable ||
+      classified.status === "rate_limited" ||
+      classified.status === "auth_error" ||
+      classified.status === "unavailable"
+    ) {
+      break;
+    }
   }
 
   const finalAttempt = attempts[attempts.length - 1];
@@ -1581,16 +1634,39 @@ async function probeAvailability(url, headers, modelId) {
   };
 }
 
-async function postToolSupportVariant(url, headers, modelId, variant, timeoutMs, phase) {
+function getToolSupportBudgetPlan(variantName) {
+  if (variantName === "tools-only") {
+    return [...TOOL_SUPPORT_TOKEN_BUDGETS, null];
+  }
+  if (variantName === "legacy-function-call") {
+    return [...TOOL_SUPPORT_LEGACY_TOKEN_BUDGETS, null];
+  }
+  return [...TOOL_SUPPORT_SECONDARY_TOKEN_BUDGETS, null];
+}
+
+async function postToolSupportVariant(url, headers, modelId, variant, maxTokens, timeoutMs, phase, counter) {
+  if (counter.used >= TOOL_SUPPORT_MAX_ATTEMPTS) {
+    return {
+      probe: null,
+      error: new Error(`Tool support attempt limit reached (${TOOL_SUPPORT_MAX_ATTEMPTS})`),
+      phase,
+      timeoutMs,
+      maxTokens,
+      exhausted: true
+    };
+  }
+
+  counter.used += 1;
+  const payload = clonePayloadWithOptionalMaxTokens(variant.payload, maxTokens);
   try {
-    const probe = await postProbeRequest(url, headers, variant.payload, {
+    const probe = await postProbeRequest(url, headers, payload, {
       modelId,
       purpose: `Tool support ${phase} (${variant.name})`,
       timeoutMs
     });
-    return { probe, error: null, phase, timeoutMs };
+    return { probe, error: null, phase, timeoutMs, maxTokens, exhausted: false };
   } catch (error) {
-    return { probe: null, error, phase, timeoutMs };
+    return { probe: null, error, phase, timeoutMs, maxTokens, exhausted: false };
   }
 }
 
@@ -1599,115 +1675,101 @@ function summarizeToolAttempt(variant, attempt, classification, extra = "") {
   return `${variant.name}/${attempt.phase}: ${classification}${suffix}`;
 }
 
-async function probeToolSupportVariant(url, headers, modelId, variant) {
+async function probeToolSupportVariant(url, headers, modelId, variant, counter) {
   const attempts = [];
-  let attempt = await postToolSupportVariant(
-    url,
-    headers,
-    modelId,
-    variant,
-    TOOL_SUPPORT_INITIAL_TIMEOUT_MS,
-    `initial ${TOOL_SUPPORT_MAX_TOKENS} max_tokens, ${TOOL_SUPPORT_INITIAL_TIMEOUT_MS}ms timeout`
-  );
+  const budgetPlan = getToolSupportBudgetPlan(variant.name);
 
-  if (attempt.error && /timed out/i.test(attempt.error.message)) {
-    attempts.push(summarizeToolAttempt(variant, attempt, "timeout", summarizeErrorText(attempt.error.message, 120)));
-    attempt = await postToolSupportVariant(
+  for (let budgetIndex = 0; budgetIndex < budgetPlan.length; budgetIndex += 1) {
+    const maxTokens = budgetPlan[budgetIndex];
+    const label = `${formatMaxTokensForSummary(maxTokens)}, ${TOOL_SUPPORT_INITIAL_TIMEOUT_MS}ms timeout`;
+    let attempt = await postToolSupportVariant(
       url,
       headers,
       modelId,
       variant,
-      TOOL_SUPPORT_FALLBACK_TIMEOUT_MS,
-      `fallback ${TOOL_SUPPORT_MAX_TOKENS} max_tokens, ${TOOL_SUPPORT_FALLBACK_TIMEOUT_MS}ms timeout`
+      maxTokens,
+      TOOL_SUPPORT_INITIAL_TIMEOUT_MS,
+      `initial ${label}`,
+      counter
     );
-  }
 
-  if (attempt.error) {
-    const classification = classifyToolSupportError(0, attempt.error.message);
-    attempts.push(summarizeToolAttempt(variant, attempt, classification, summarizeErrorText(attempt.error.message, 120)));
-    return { outcome: classification, summary: attempts.join(" | "), rateLimited: false };
-  }
-
-  let { probe } = attempt;
-  if (probe.rateLimited) {
-    attempts.push(summarizeToolAttempt(variant, attempt, "rate_limited"));
-    return { outcome: "rate_limited", summary: attempts.join(" | "), rateLimited: true };
-  }
-
-  if (
-    probe.response.ok &&
-    !hasToolCallInResponse(probe.body) &&
-    shouldRetryAcceptedToolProbe(probe.body)
-  ) {
-    if (TOOL_SUPPORT_RETRY_MAX_TOKENS <= variant.payload.max_tokens) {
-      attempts.push(
-        summarizeToolAttempt(
-          variant,
-          attempt,
-          "length_limited",
-          `at ${variant.payload.max_tokens} max_tokens`
-        )
-      );
+    if (attempt.exhausted) {
+      attempts.push(summarizeToolAttempt(variant, attempt, "max_attempts_exhausted"));
       return { outcome: "inconclusive", summary: attempts.join(" | "), rateLimited: false };
     }
 
-    attempts.push(
-      summarizeToolAttempt(
+    if (attempt.error && /timed out/i.test(attempt.error.message)) {
+      attempts.push(summarizeToolAttempt(variant, attempt, "timeout", summarizeErrorText(attempt.error.message, 120)));
+      attempt = await postToolSupportVariant(
+        url,
+        headers,
+        modelId,
         variant,
-        attempt,
-        "length_limited",
-        `retrying with ${TOOL_SUPPORT_RETRY_MAX_TOKENS} max_tokens`
-      )
-    );
-    attempt = await postToolSupportVariant(
-      url,
-      headers,
-      modelId,
-      {
-        ...variant,
-        payload: clonePayloadWithMaxTokens(variant.payload, TOOL_SUPPORT_RETRY_MAX_TOKENS)
-      },
-      TOOL_SUPPORT_FALLBACK_TIMEOUT_MS,
-      `retry ${TOOL_SUPPORT_RETRY_MAX_TOKENS} max_tokens, ${TOOL_SUPPORT_FALLBACK_TIMEOUT_MS}ms timeout`
-    );
+        maxTokens,
+        TOOL_SUPPORT_FALLBACK_TIMEOUT_MS,
+        `fallback ${formatMaxTokensForSummary(maxTokens)}, ${TOOL_SUPPORT_FALLBACK_TIMEOUT_MS}ms timeout`,
+        counter
+      );
+    }
 
     if (attempt.error) {
+      if (attempt.exhausted) {
+        attempts.push(summarizeToolAttempt(variant, attempt, "max_attempts_exhausted"));
+        return { outcome: "inconclusive", summary: attempts.join(" | "), rateLimited: false };
+      }
+
       const classification = classifyToolSupportError(0, attempt.error.message);
       attempts.push(summarizeToolAttempt(variant, attempt, classification, summarizeErrorText(attempt.error.message, 120)));
       return { outcome: classification, summary: attempts.join(" | "), rateLimited: false };
     }
 
-    probe = attempt.probe;
-  }
-
-  if (probe.rateLimited) {
-    attempts.push(summarizeToolAttempt(variant, attempt, "rate_limited"));
-    return { outcome: "rate_limited", summary: attempts.join(" | "), rateLimited: true };
-  }
-
-  if (probe.response.ok) {
-    if (hasToolCallInResponse(probe.body)) {
-      attempts.push(summarizeToolAttempt(variant, attempt, "supported"));
-      return { outcome: "supported", summary: attempts.join(" | "), rateLimited: false };
+    const { probe } = attempt;
+    if (probe.rateLimited) {
+      attempts.push(summarizeToolAttempt(variant, attempt, "rate_limited"));
+      return { outcome: "rate_limited", summary: attempts.join(" | "), rateLimited: true };
     }
 
-    attempts.push(summarizeToolAttempt(variant, attempt, "accepted_no_tool_call"));
-    return { outcome: "accepted_no_tool_call", summary: attempts.join(" | "), rateLimited: false };
+    if (probe.response.ok) {
+      if (hasToolCallInResponse(probe.body)) {
+        attempts.push(summarizeToolAttempt(variant, attempt, "supported"));
+        return { outcome: "supported", summary: attempts.join(" | "), rateLimited: false };
+      }
+
+      const outcome = shouldRetryAcceptedToolProbe(probe.body) ? "length_limited" : "accepted_no_tool_call";
+      attempts.push(
+        summarizeToolAttempt(variant, attempt, outcome, `at ${formatMaxTokensForSummary(maxTokens)}`)
+      );
+      continue;
+    }
+
+    const toolErrorText = getErrorText(probe.body, probe.bodyText);
+    const classification = classifyToolSupportError(probe.response.status, toolErrorText);
+    attempts.push(summarizeToolAttempt(variant, attempt, classification, summarizeErrorText(toolErrorText, 120)));
+
+    if (classification === "max_tokens_unsupported" && typeof maxTokens === "number") {
+      const noMaxIndex = budgetPlan.indexOf(null);
+      if (noMaxIndex === -1) {
+        budgetPlan.push(null);
+      } else if (noMaxIndex > budgetIndex) {
+        budgetIndex = noMaxIndex - 1;
+      }
+      continue;
+    }
+
+    return { outcome: classification, summary: attempts.join(" | "), rateLimited: false };
   }
 
-  const toolErrorText = getErrorText(probe.body, probe.bodyText);
-  const classification = classifyToolSupportError(probe.response.status, toolErrorText);
-  attempts.push(summarizeToolAttempt(variant, attempt, classification, summarizeErrorText(toolErrorText, 120)));
-  return { outcome: classification, summary: attempts.join(" | "), rateLimited: false };
+  return { outcome: "accepted_no_tool_call", summary: attempts.join(" | "), rateLimited: false };
 }
 
 async function probeToolSupport(url, headers, modelId) {
   const summaries = [];
   let sawAcceptedNoToolCall = false;
   let sawUnsupported = false;
+  const counter = { used: 0 };
 
   for (const variant of getToolSupportProbePayloads(modelId)) {
-    const result = await probeToolSupportVariant(url, headers, modelId, variant);
+    const result = await probeToolSupportVariant(url, headers, modelId, variant, counter);
     summaries.push(result.summary);
 
     if (result.outcome === "supported") {
@@ -1751,14 +1813,6 @@ async function probeToolSupport(url, headers, modelId) {
 
     if (result.outcome === "unsupported") {
       sawUnsupported = true;
-      if (variant.name === "tools-only") {
-        return buildToolSupportResult({
-          toolSupport: false,
-          toolSupportChecked: true,
-          toolSupportReason: "unsupported",
-          toolSupportSummary: summaries.join(" | ")
-        });
-      }
       continue;
     }
 
