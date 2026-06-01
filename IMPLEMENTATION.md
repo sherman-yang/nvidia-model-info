@@ -71,6 +71,7 @@ All remaining metadata keys are flattened and appended as sortable columns.
 1. Availability and latency probe
    - first sends a chat completion request without `max_tokens`
    - then steps through `AVAILABILITY_TOKEN_STEPS` (`4096,16384,65536,262144` by default) until the model is callable or a terminal failure is known
+   - the ladder escalates from the no-`max_tokens` attempt to the first numeric step only to clear a "max_tokens is required" rejection; once a numeric budget has been sent and the attempt still returns a timeout, backend error, or request error, the probe stops early rather than climbing the rest of the ladder (a larger budget cannot help those and only makes timeouts more likely)
    - asks the model to reply with exactly `OK` so successful models should stop quickly even with the high token budget
    - no-`max_tokens`, `4096`, and `16384` attempts use `AVAILABILITY_INITIAL_TIMEOUT_MS` (`30000` by default)
    - `65536` and `262144` attempts use `AVAILABILITY_FALLBACK_TIMEOUT_MS` (`120000` by default)

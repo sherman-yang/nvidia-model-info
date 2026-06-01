@@ -1618,6 +1618,23 @@ async function probeAvailability(url, headers, modelId) {
     ) {
       break;
     }
+
+    // Escalating max_tokens only resolves the "max_tokens is required" case,
+    // which the first numeric step (after the initial null attempt) already
+    // covers. Once a numeric budget has been supplied and we still see a
+    // timeout / backend / request error, a larger budget cannot help and a
+    // larger value makes timeouts more likely — so stop burning rate-limit
+    // slots and bail out early.
+    if (
+      typeof maxTokens === "number" &&
+      (
+        classified.status === "timeout" ||
+        classified.status === "backend_error" ||
+        classified.status === "request_error"
+      )
+    ) {
+      break;
+    }
   }
 
   const finalAttempt = attempts[attempts.length - 1];
