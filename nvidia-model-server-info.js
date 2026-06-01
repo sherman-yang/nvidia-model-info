@@ -35,6 +35,15 @@ const PROBE_MIN_INTERVAL_MS = Math.max(
 const PROBE_TIMEOUT_MS = Math.max(1000, Number(process.env.PROBE_TIMEOUT_MS || 15000));
 const PROBE_MAX_429_RETRIES = Math.max(0, Number(process.env.PROBE_MAX_429_RETRIES || 2));
 const PROBE_429_BACKOFF_MS = Math.max(1000, Number(process.env.PROBE_429_BACKOFF_MS || 10000));
+// Probes stream responses. The per-attempt timeout below is treated as an
+// idle (time-to-first-byte / inter-chunk gap) timeout rather than a total
+// wall-clock budget, so a slow-but-steadily-streaming reasoning model is not
+// falsely timed out. This hard cap bounds the worst case of a stream that
+// trickles forever without ever idling out.
+const PROBE_STREAM_HARD_TIMEOUT_MS = Math.max(
+  10000,
+  Number(process.env.PROBE_STREAM_HARD_TIMEOUT_MS || 300000)
+);
 const AVAILABILITY_PROBE_MAX_TOKENS = Math.max(
   1,
   Number(process.env.AVAILABILITY_PROBE_MAX_TOKENS || 256 * 1024)
@@ -311,47 +320,243 @@ function getRetryDelayMs(response, attempt) {
   return PROBE_429_BACKOFF_MS * Math.pow(2, attempt);
 }
 
+// Fold one streaming `choices[0].delta` chunk into the running aggregate.
+function applyStreamDelta(agg, choice) {
+  if (!choice || typeof choice !== "object") {
+    return;
+  }
+
+  if (typeof choice.finish_reason === "string" && choice.finish_reason) {
+    agg.finishReason = choice.finish_reason;
+  }
+
+  const delta = choice.delta && typeof choice.delta === "object" ? choice.delta : null;
+  if (!delta) {
+    return;
+  }
+
+  if (typeof delta.role === "string" && delta.role) {
+    agg.role = delta.role;
+  }
+  if (typeof delta.content === "string") {
+    agg.content += delta.content;
+  }
+  for (const key of ["reasoning_content", "reasoning"]) {
+    if (typeof delta[key] === "string") {
+      agg.reasoning += delta[key];
+    }
+  }
+
+  if (Array.isArray(delta.tool_calls)) {
+    for (const call of delta.tool_calls) {
+      const index = Number.isInteger(call?.index) ? call.index : agg.toolCalls.size;
+      const existing = agg.toolCalls.get(index) || {
+        id: "",
+        type: "function",
+        function: { name: "", arguments: "" }
+      };
+      if (typeof call?.id === "string" && call.id) {
+        existing.id = call.id;
+      }
+      if (typeof call?.type === "string" && call.type) {
+        existing.type = call.type;
+      }
+      if (call?.function && typeof call.function === "object") {
+        if (typeof call.function.name === "string" && call.function.name) {
+          existing.function.name = call.function.name;
+        }
+        if (typeof call.function.arguments === "string") {
+          existing.function.arguments += call.function.arguments;
+        }
+      }
+      agg.toolCalls.set(index, existing);
+    }
+  }
+
+  if (delta.function_call && typeof delta.function_call === "object") {
+    if (!agg.functionCall) {
+      agg.functionCall = { name: "", arguments: "" };
+    }
+    if (typeof delta.function_call.name === "string" && delta.function_call.name) {
+      agg.functionCall.name = delta.function_call.name;
+    }
+    if (typeof delta.function_call.arguments === "string") {
+      agg.functionCall.arguments += delta.function_call.arguments;
+    }
+  }
+}
+
+// Collapse the aggregate into the same shape a non-streaming chat completion
+// would return, so the existing body classifiers keep working unchanged.
+function buildAggregatedBody(agg) {
+  const message = { role: agg.role || "assistant", content: agg.content };
+  if (agg.reasoning) {
+    message.reasoning_content = agg.reasoning;
+  }
+  const toolCalls = [...agg.toolCalls.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([, value]) => value);
+  if (toolCalls.length > 0) {
+    message.tool_calls = toolCalls;
+  }
+  if (agg.functionCall) {
+    message.function_call = agg.functionCall;
+  }
+  return {
+    choices: [{ index: 0, message, finish_reason: agg.finishReason || null }]
+  };
+}
+
+// Read an SSE chat-completion stream to completion, re-arming the idle timeout
+// on every chunk. Returns the aggregated (non-streaming-shaped) body plus the
+// raw text. Falls back to parsing a plain JSON body if the endpoint ignored
+// `stream: true` and answered without SSE framing.
+async function consumeChatStream(response, rearmIdle) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const agg = {
+    role: "assistant",
+    content: "",
+    reasoning: "",
+    toolCalls: new Map(),
+    functionCall: null,
+    finishReason: ""
+  };
+  let buffer = "";
+  let raw = "";
+  let sawData = false;
+
+  const handleEvent = (rawEvent) => {
+    const dataLines = rawEvent
+      .split("\n")
+      .map((line) => line.trimEnd())
+      .filter((line) => line.startsWith("data:"))
+      .map((line) => line.slice(5).trim());
+    if (dataLines.length === 0) {
+      return;
+    }
+    const dataStr = dataLines.join("\n");
+    if (!dataStr || dataStr === "[DONE]") {
+      return;
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(dataStr);
+    } catch {
+      return;
+    }
+    sawData = true;
+    const choice = Array.isArray(parsed?.choices) ? parsed.choices[0] : null;
+    applyStreamDelta(agg, choice);
+  };
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      rearmIdle();
+      const chunk = decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
+      raw += chunk;
+      buffer += chunk;
+      let sep;
+      while ((sep = buffer.indexOf("\n\n")) !== -1) {
+        handleEvent(buffer.slice(0, sep));
+        buffer = buffer.slice(sep + 2);
+      }
+    }
+    if (buffer.trim()) {
+      handleEvent(buffer);
+    }
+  } finally {
+    reader.cancel().catch(() => {});
+  }
+
+  // Endpoint ignored stream:true and returned a normal JSON completion.
+  if (!sawData) {
+    const parsed = parseResponseBodyText(raw);
+    if (parsed && typeof parsed === "object" && Array.isArray(parsed.choices)) {
+      return { body: parsed, rawText: raw };
+    }
+  }
+
+  return { body: buildAggregatedBody(agg), rawText: raw };
+}
+
 async function postProbeRequest(url, headers, payload, { modelId, purpose, timeoutMs }) {
   let attempt = 0;
+  const streamingPayload = payload.stream === true ? payload : { ...payload, stream: true };
+  const hardTimeoutMs = Math.max(PROBE_STREAM_HARD_TIMEOUT_MS, timeoutMs);
 
   while (true) {
     await reserveProbeSlot();
-    const timeoutWrap = withTimeout(null, timeoutMs);
+    const controller = new AbortController();
+    let idleTimer = null;
+    const rearmIdle = () => {
+      if (idleTimer) {
+        clearTimeout(idleTimer);
+      }
+      idleTimer = setTimeout(() => {
+        controller.abort(new Error(`Request timed out after ${timeoutMs}ms (no stream activity)`));
+      }, timeoutMs);
+    };
+    const hardTimer = setTimeout(() => {
+      controller.abort(new Error(`Request timed out after ${hardTimeoutMs}ms (stream hard cap)`));
+    }, hardTimeoutMs);
+
     if (process.env.PROBE_TRACE === "1") {
       console.log(`[probe-trace ${new Date().toISOString()}] ${purpose} → ${modelId} (attempt ${attempt + 1})`);
     }
 
     try {
+      rearmIdle();
       const response = await fetch(url, {
         method: "POST",
         headers,
-        body: JSON.stringify(payload),
-        signal: timeoutWrap.signal
+        body: JSON.stringify(streamingPayload),
+        signal: controller.signal
       });
 
-      const bodyText = await response.text();
-      const body = parseResponseBodyText(bodyText);
+      // Errors (incl. 429) come back as a normal JSON/text body, not an SSE
+      // stream, so read them directly.
+      if (!response.ok || !response.body) {
+        const bodyText = await response.text();
+        const body = parseResponseBodyText(bodyText);
 
-      if (response.status === 429 && attempt < PROBE_MAX_429_RETRIES) {
-        const waitMs = getRetryDelayMs(response, attempt);
-        extendProbeBackoffWindow(waitMs);
-        console.warn(
-          `${purpose} probe hit 429 for ${modelId}; waiting ${waitMs}ms before retry ${attempt + 1}/${PROBE_MAX_429_RETRIES}`
-        );
-        attempt += 1;
-        await sleep(waitMs);
-        continue;
+        if (response.status === 429 && attempt < PROBE_MAX_429_RETRIES) {
+          const waitMs = getRetryDelayMs(response, attempt);
+          extendProbeBackoffWindow(waitMs);
+          console.warn(
+            `${purpose} probe hit 429 for ${modelId}; waiting ${waitMs}ms before retry ${attempt + 1}/${PROBE_MAX_429_RETRIES}`
+          );
+          attempt += 1;
+          await sleep(waitMs);
+          continue;
+        }
+
+        return {
+          response,
+          bodyText,
+          body,
+          rateLimited: response.status === 429,
+          attempts: attempt + 1
+        };
       }
 
+      const { body, rawText } = await consumeChatStream(response, rearmIdle);
       return {
         response,
-        bodyText,
+        bodyText: rawText,
         body,
-        rateLimited: response.status === 429,
+        rateLimited: false,
         attempts: attempt + 1
       };
     } finally {
-      timeoutWrap.clear();
+      if (idleTimer) {
+        clearTimeout(idleTimer);
+      }
+      clearTimeout(hardTimer);
     }
   }
 }
@@ -2208,19 +2413,31 @@ app.get("/api/specs-meta", (_req, res) => {
   res.json({ exists, entries, withContext, lastFetchedAt });
 });
 
-app.listen(PORT, () => {
-  const appUrl = `http://localhost:${PORT}`;
-  console.log(`nvidia-model-info server started at ${appUrl}`);
-  if (getApiKey()) {
-    console.log(`Using API key from environment variable ${API_KEY_ENV_NAME}`);
-  } else {
-    console.warn(
-      `WARNING: environment variable ${API_KEY_ENV_NAME} is not set.\n` +
-      `The dashboard will load model metadata, but every Live Ping / Test Displayed Models\n` +
-      `request will return 401 from NVIDIA because /v1/chat/completions requires auth.\n` +
-      `Set it before launching to enable live probing:\n` +
-      `  export ${API_KEY_ENV_NAME}="your_nvidia_api_key"  &&  ./start.sh`
-    );
-  }
-  launchBrowser(appUrl);
-});
+// Only bind the port / open a browser when run directly (`node …` / `npm
+// start`). Requiring this file as a module (e.g. from a test) gets the
+// exported helpers below without the server side effects.
+if (require.main === module) {
+  app.listen(PORT, () => {
+    const appUrl = `http://localhost:${PORT}`;
+    console.log(`nvidia-model-info server started at ${appUrl}`);
+    if (getApiKey()) {
+      console.log(`Using API key from environment variable ${API_KEY_ENV_NAME}`);
+    } else {
+      console.warn(
+        `WARNING: environment variable ${API_KEY_ENV_NAME} is not set.\n` +
+        `The dashboard will load model metadata, but every Live Ping / Test Displayed Models\n` +
+        `request will return 401 from NVIDIA because /v1/chat/completions requires auth.\n` +
+        `Set it before launching to enable live probing:\n` +
+        `  export ${API_KEY_ENV_NAME}="your_nvidia_api_key"  &&  ./start.sh`
+      );
+    }
+    launchBrowser(appUrl);
+  });
+}
+
+module.exports = {
+  postProbeRequest,
+  consumeChatStream,
+  applyStreamDelta,
+  buildAggregatedBody
+};

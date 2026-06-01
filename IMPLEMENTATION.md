@@ -66,15 +66,29 @@ All remaining metadata keys are flattened and appended as sortable columns.
 
 ## Live Test Flow
 
-`GET /api/test-model?model=...` performs up to three probes:
+`GET /api/test-model?model=...` performs up to three probes.
+
+All probe requests are sent with `stream: true` and the Server-Sent-Events
+response is consumed incrementally, with the streamed deltas aggregated back
+into a normal chat-completion shape before classification. Because of this,
+every per-attempt timeout below (`*_INITIAL_TIMEOUT_MS` / `*_FALLBACK_TIMEOUT_MS`)
+is an **idle timeout** — the maximum time-to-first-byte and the maximum gap
+between streamed chunks — rather than a total wall-clock budget. A slow but
+steadily-streaming reasoning model therefore is not falsely timed out, while a
+stalled connection still aborts promptly. `PROBE_STREAM_HARD_TIMEOUT_MS`
+(`300000` by default) caps the total duration of any single streamed attempt so
+a stream that trickles forever cannot hang a probe indefinitely. Error
+responses (including `429`) arrive as ordinary JSON rather than SSE and are read
+directly; if an endpoint ignores `stream: true` and returns a complete JSON
+body, the consumer falls back to parsing it as a non-streaming completion.
 
 1. Availability and latency probe
    - first sends a chat completion request without `max_tokens`
    - then steps through `AVAILABILITY_TOKEN_STEPS` (`4096,16384,65536,262144` by default) until the model is callable or a terminal failure is known
    - the ladder escalates from the no-`max_tokens` attempt to the first numeric step only to clear a "max_tokens is required" rejection; once a numeric budget has been sent and the attempt still returns a timeout, backend error, or request error, the probe stops early rather than climbing the rest of the ladder (a larger budget cannot help those and only makes timeouts more likely)
    - asks the model to reply with exactly `OK` so successful models should stop quickly even with the high token budget
-   - no-`max_tokens`, `4096`, and `16384` attempts use `AVAILABILITY_INITIAL_TIMEOUT_MS` (`30000` by default)
-   - `65536` and `262144` attempts use `AVAILABILITY_FALLBACK_TIMEOUT_MS` (`120000` by default)
+   - no-`max_tokens`, `4096`, and `16384` attempts use `AVAILABILITY_INITIAL_TIMEOUT_MS` (`30000` by default) as the idle timeout
+   - `65536` and `262144` attempts use `AVAILABILITY_FALLBACK_TIMEOUT_MS` (`120000` by default) as the idle timeout
    - `200` means HTTP-callable, but the backend also records whether the response was a normal final answer, length-limited, reasoning-only, or missing final content
    - latency is measured around all availability attempts for that model
    - all model-invocation probe requests pass through a shared rate limiter before the request is sent
@@ -83,8 +97,8 @@ All remaining metadata keys are flattened and appended as sortable columns.
    - skipped entirely when `model_specs.json` already provides `maxOutputTokens` for this model
    - can run after an availability timeout, backend error, or other inconclusive availability result
    - skipped after terminal availability failures such as auth errors or explicit model-unavailable errors
-   - first uses `OUTPUT_LIMIT_INITIAL_TIMEOUT_MS` (`30000` by default)
-   - retries once with `OUTPUT_LIMIT_FALLBACK_TIMEOUT_MS` (`120000` by default) when the first output-limit attempt times out
+   - first uses `OUTPUT_LIMIT_INITIAL_TIMEOUT_MS` (`30000` by default) as the idle timeout
+   - retries once with `OUTPUT_LIMIT_FALLBACK_TIMEOUT_MS` (`120000` by default) as the idle timeout when the first output-limit attempt times out
    - sends an oversized `max_tokens` request and parses the resulting NVIDIA error for the limit
    - if the model accepts the oversized value, the visible value remains `Unknown` and the hidden status is `no_limit_reported`
    - if NVIDIA returns `429`, falls back to `Rate Limited`
@@ -100,8 +114,8 @@ All remaining metadata keys are flattened and appended as sortable columns.
    - primary `tools` attempts use `TOOL_SUPPORT_TOKEN_BUDGETS` (`128,512,2048,8192` by default) followed by no `max_tokens`
    - secondary `tool_choice` attempts use `TOOL_SUPPORT_SECONDARY_TOKEN_BUDGETS` (`512,2048` by default) followed by no `max_tokens`
    - legacy `functions` attempts use `TOOL_SUPPORT_LEGACY_TOKEN_BUDGETS` (`512` by default) followed by no `max_tokens`
-   - each attempt starts with `TOOL_SUPPORT_INITIAL_TIMEOUT_MS` (`30000` by default)
-   - the same budget is retried once with `TOOL_SUPPORT_FALLBACK_TIMEOUT_MS` (`120000` by default) only when that attempt times out
+   - each attempt starts with `TOOL_SUPPORT_INITIAL_TIMEOUT_MS` (`30000` by default) as the idle timeout
+   - the same budget is retried once with `TOOL_SUPPORT_FALLBACK_TIMEOUT_MS` (`120000` by default) as the idle timeout only when that attempt times out
    - the entire tool probe is capped by `TOOL_SUPPORT_MAX_ATTEMPTS` (`8` by default)
    - only runs after the availability probe confirms the model accepts a chat completion request
    - early-stops on confirmed support, rate limits, backend errors, fallback timeout, or the max-attempt cap
@@ -235,6 +249,7 @@ Supported environment variables:
 - `PROBE_RATE_LIMIT_RPM`
 - `PROBE_MIN_INTERVAL_MS`
 - `PROBE_TIMEOUT_MS`
+- `PROBE_STREAM_HARD_TIMEOUT_MS`
 - `AVAILABILITY_PROBE_MAX_TOKENS`
 - `AVAILABILITY_TOKEN_STEPS`
 - `AVAILABILITY_INITIAL_TIMEOUT_MS`

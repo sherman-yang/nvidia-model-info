@@ -38,9 +38,14 @@ Provide a local dashboard for inspecting the free model catalog on `build.nvidia
   - latency
   - max output tokens (only when the spec did not already provide a value)
   - tool calling support
+- Probe requests must be streamed (`stream: true`) and the streamed deltas
+  reassembled into a normal completion before classification. Per-attempt
+  timeouts must be interpreted as idle (time-to-first-byte / inter-chunk)
+  timeouts rather than total wall-clock budgets, with an absolute hard cap
+  (`PROBE_STREAM_HARD_TIMEOUT_MS`) bounding any single streamed attempt.
 - Availability probing must first omit `max_tokens`, then step through `4096`,
   `16384`, `65536`, and `262144` by default when needed.
-- Availability probing must use a tiered timeout strategy: 30 seconds for
+- Availability probing must use a tiered idle-timeout strategy: 30 seconds for
   no-`max_tokens`, `4096`, and `16384` attempts; 120 seconds for `65536` and
   `262144` attempts.
 - Availability results must distinguish HTTP-callable, normal-output,

@@ -71,12 +71,19 @@ NVIDIA model cards.
 
 ## Live Probe Behavior
 
-`GET /api/test-model?model=<id>` performs up to three sequential checks:
+`GET /api/test-model?model=<id>` performs up to three sequential checks. Every
+probe request is streamed (`stream: true`): the response is consumed chunk by
+chunk and the deltas are reassembled into a normal completion before
+classification. As a result the per-attempt timeouts below are **idle
+timeouts** (time-to-first-byte and the gap between chunks), not total
+wall-clock budgets, so a slow-but-steadily-streaming reasoning model is not
+falsely timed out. `PROBE_STREAM_HARD_TIMEOUT_MS` (300s default) caps the total
+duration of any one streamed attempt.
 
 1. Availability and latency using `chat/completions`. The first attempt sends
    no `max_tokens`, then the backend steps through `4096`, `16384`, `65536`,
-   and `262144` when needed. Attempts below `65536` use a 30-second timeout;
-   `65536` and `262144` use a 120-second timeout. Availability stores a hidden
+   and `262144` when needed. Attempts below `65536` use a 30-second idle timeout;
+   `65536` and `262144` use a 120-second idle timeout. Availability stores a hidden
    status such as `available`,
    `available_length_limited`, `timeout`, `unavailable`, or `backend_error`.
 2. Max output token detection using an oversized `max_tokens` request when
@@ -108,6 +115,7 @@ probe calls must stay strictly below NVIDIA's 40 RPM free-tier cap.
 | `PROBE_MIN_INTERVAL_MS` | derived, minimum `1550` | Minimum delay between any two model probe calls |
 | `PROBE_MAX_429_RETRIES` | `2` | Retries after `429 Too Many Requests` |
 | `PROBE_429_BACKOFF_MS` | `10000` | Base exponential backoff when no `Retry-After` header exists |
+| `PROBE_STREAM_HARD_TIMEOUT_MS` | `300000` | Absolute cap on a single streamed probe attempt (per-attempt timeouts are idle/inter-chunk timeouts) |
 | `AVAILABILITY_PROBE_MAX_TOKENS` | `262144` | Highest `max_tokens` used by the availability ladder |
 | `AVAILABILITY_TOKEN_STEPS` | `4096,16384,65536,262144` | Comma-separated availability token ladder after the no-`max_tokens` attempt |
 | `AVAILABILITY_INITIAL_TIMEOUT_MS` | `30000` | First availability probe timeout |
@@ -130,6 +138,7 @@ load `.env` files.
 | `MAX_CONCURRENCY` | `12` | Parallel metadata fetches |
 | `REQUEST_TIMEOUT_MS` | `20000` | Generic HTTP timeout |
 | `CACHE_TTL_MS` | `300000` | In-memory table cache TTL |
+| `PROBE_STREAM_HARD_TIMEOUT_MS` | `300000` | Absolute cap per streamed probe attempt; per-attempt timeouts below are idle/inter-chunk timeouts |
 | `AVAILABILITY_PROBE_MAX_TOKENS` | `262144` | Highest availability probe token budget; default is 256K |
 | `AVAILABILITY_TOKEN_STEPS` | `4096,16384,65536,262144` | Comma-separated availability token ladder after no `max_tokens` |
 | `AVAILABILITY_INITIAL_TIMEOUT_MS` | `30000` | First availability probe timeout |

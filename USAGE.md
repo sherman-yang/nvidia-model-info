@@ -49,10 +49,16 @@ The default URL is `http://localhost:4920`.
 
 Click `Ping` on a row to re-test that model.
 
+All probe requests are streamed (`stream: true`), so the timeouts below are
+**idle timeouts** (time-to-first-byte and the gap between streamed chunks), not
+total wall-clock budgets — a slow but steadily-streaming reasoning model is not
+falsely timed out. `PROBE_STREAM_HARD_TIMEOUT_MS` (300s default) caps the total
+duration of any single streamed attempt.
+
 The backend probes:
 
-1. Availability and latency with a ladder: no `max_tokens`, then `4096`, `16384`, `65536`, and `262144` when needed. Lower-budget attempts use a 30-second timeout; `65536` and `262144` use a 120-second timeout.
-2. Output-token limit when `model_specs.json` does not already provide `maxOutputTokens`; this can still run after an availability timeout or inconclusive availability error and has its own 30-second / 120-second timeout tiers.
+1. Availability and latency with a ladder: no `max_tokens`, then `4096`, `16384`, `65536`, and `262144` when needed. Lower-budget attempts use a 30-second idle timeout; `65536` and `262144` use a 120-second idle timeout.
+2. Output-token limit when `model_specs.json` does not already provide `maxOutputTokens`; this can still run after an availability timeout or inconclusive availability error and has its own 30-second / 120-second idle-timeout tiers.
 3. Tool calling support with a bounded token ladder. The primary `tools` request tries `128`, `512`, `2048`, `8192`, then no `max_tokens`; secondary variants use smaller ladders; the whole tool probe stops after 8 requests.
 
 `Context Limit` is never re-probed live — it always comes from `model_specs.json`. To refresh that value, use `Force Refresh Data` (or `npm run populate-specs`).
