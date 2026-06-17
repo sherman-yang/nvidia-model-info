@@ -6,4 +6,5 @@ test-results
 playwright-report
 .playwright-mcp/
 model_limits_cache.json
+model_specs.json
 .claude/
